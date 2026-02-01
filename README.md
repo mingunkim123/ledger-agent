@@ -25,7 +25,7 @@
 | 단계 | 내용 | 산출물 |
 |------|------|--------|
 | **Step 1** | 프로젝트 구조 & README | ✅ 이 문서 |
-| **Step 2** | DB 스키마 (MVP 테이블) | `schema.sql` |
+| **Step 2** | DB 스키마 (MVP 테이블) | ✅ `schema.sql` |
 | **Step 3** | 백엔드 기본 골격 (API + Auth) | FastAPI/Node 프로젝트 |
 | **Step 4** | Idempotency 레이어 | `idempotency_keys` 구현 |
 | **Step 5** | 트랜잭션 CRUD + 정규화 규칙 | `transactions` API |
@@ -70,4 +70,4 @@
 
 ---
 
-*다음 단계: Step 2 - DB 스키마 (`schema.sql`) 작성*
+*다음 단계: Step 3 - 백엔드 기본 골격 (API + Auth)*
