@@ -1,0 +1,4 @@
+# FastAPI 의존성 (Step 3-3)
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic-settings>=2.0

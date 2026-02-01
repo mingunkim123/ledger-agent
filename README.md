@@ -26,7 +26,9 @@
 |------|------|--------|
 | **Step 1** | 프로젝트 구조 & README | ✅ 이 문서 |
 | **Step 2** | DB 스키마 (MVP 테이블) | ✅ `schema.sql` |
-| **Step 3** | 백엔드 기본 골격 (API + Auth) | FastAPI/Node 프로젝트 |
+| **Step 3-1** | FastAPI 최소 골격 (requirements + main.py) | ✅ `backend/` |
+| **Step 3-2** | 라우터 구조 (4개 엔드포인트 플레이스홀더) | ✅ `routers/` |
+| **Step 3-3** | Config + Auth 플레이스홀더 | ✅ `config.py`, `auth.py` |
 | **Step 4** | Idempotency 레이어 | `idempotency_keys` 구현 |
 | **Step 5** | 트랜잭션 CRUD + 정규화 규칙 | `transactions` API |
 | **Step 6** | Undo + Redis TTL | `POST /undo` |
@@ -70,4 +72,4 @@
 
 ---
 
-*다음 단계: Step 3 - 백엔드 기본 골격 (API + Auth)*
+*다음 단계: Step 4 - Idempotency 레이어*
