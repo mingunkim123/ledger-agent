@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     # Redis (Step 6 - Undo)
     redis_url: str = "redis://localhost:6379/0"
+    undo_ttl_seconds: int = 300  # 5분
 
     class Config:
         env_file = ".env"

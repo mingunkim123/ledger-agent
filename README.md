@@ -35,7 +35,9 @@
 | **Step 5-1** | 정규화 헬퍼 (날짜/금액/카테고리) | ✅ `services/normalizer.py` |
 | **Step 5-2** | POST /transactions에 정규화 적용 | ✅ `routers/transactions.py` |
 | **Step 5-3** | GET /transactions 리스트 조회 | ✅ `routers/transactions.py` |
-| **Step 6** | Undo + Redis TTL | `POST /undo` |
+| **Step 6-1** | Redis 연결 설정 | ✅ `redis_client.py` |
+| **Step 6-2** | Undo 토큰 저장 (POST /transactions 응답에 undo_token) | ✅ `services/undo.py` |
+| **Step 6-3** | POST /undo 구현 | ✅ `routers/undo.py` |
 | **Step 7** | 감사로그 | `audit_logs` 기록 |
 | **Step 8** | LLM Orchestrator + Tool 호출 | `/chat` 엔드포인트 |
 | **Step 9** | Flutter 앱 기본 UI | 채팅 입력 + 응답 표시 |
@@ -76,4 +78,4 @@
 
 ---
 
-*다음 단계: Step 6 - Undo + Redis TTL*
+*다음 단계: Step 7 - 감사로그*

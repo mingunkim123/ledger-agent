@@ -1,5 +1,5 @@
-"""POST/GET /transactions (Step 5-2: 정규화 적용)"""
-from uuid import UUID
+"""POST/GET /transactions (Step 6-2: undo_token 추가)"""
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
@@ -9,6 +9,7 @@ from app.database import get_db
 from app.schemas.transaction import CreateTransactionRequest
 from app.services.idempotency import get_cached_tx_id, save_idempotency
 from app.services.normalizer import normalize_amount, normalize_category, normalize_date
+from app.services.undo import save_undo_token
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -27,7 +28,7 @@ async def create_transaction(
     if body.idem_key:
         cached = await get_cached_tx_id(session, body.user_id, body.idem_key)
         if cached:
-            return {"tx_id": str(cached), "cached": True}
+            return {"tx_id": str(cached), "cached": True, "undo_token": None}
 
     # 정규화 (서버 최종 책임)
     try:
@@ -68,7 +69,11 @@ async def create_transaction(
     if body.idem_key:
         await save_idempotency(session, body.user_id, body.idem_key, tx_id)
 
-    return {"tx_id": str(tx_id), "cached": False}
+    # undo_token: Redis에 TTL 저장
+    undo_token = str(uuid4())
+    await save_undo_token(undo_token, tx_id)
+
+    return {"tx_id": str(tx_id), "cached": False, "undo_token": undo_token}
 
 
 @router.get("")

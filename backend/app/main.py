@@ -1,15 +1,27 @@
 """
-가계부 에이전트 - FastAPI 앱 (Step 4-1)
+가계부 에이전트 - FastAPI 앱 (Step 6-1)
 """
-from fastapi import Depends, FastAPI
+from contextlib import asynccontextmanager
 
-from app.config import settings
-from app.database import get_db
-from app.routers import chat, transactions, undo, summary
+from fastapi import Depends, FastAPI
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-app = FastAPI(title=settings.app_name, version="0.1.0")
+from app.config import settings
+from app.database import get_db
+from app.redis_client import close_redis, init_redis
+from app.routers import chat, transactions, undo, summary
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """앱 시작/종료 시 Redis 연결 관리"""
+    await init_redis()
+    yield
+    await close_redis()
+
+
+app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 
 # 라우터 등록
 app.include_router(chat.router)
