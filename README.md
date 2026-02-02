@@ -29,7 +29,9 @@
 | **Step 3-1** | FastAPI 최소 골격 (requirements + main.py) | ✅ `backend/` |
 | **Step 3-2** | 라우터 구조 (4개 엔드포인트 플레이스홀더) | ✅ `routers/` |
 | **Step 3-3** | Config + Auth 플레이스홀더 | ✅ `config.py`, `auth.py` |
-| **Step 4** | Idempotency 레이어 | `idempotency_keys` 구현 |
+| **Step 4-1** | DB 연결 설정 | ✅ `database.py`, `/health/db` |
+| **Step 4-2** | Idempotency 서비스 (get_cached, save) | ✅ `services/idempotency.py` |
+| **Step 4-3** | POST /transactions에 idempotency 적용 | ✅ `routers/transactions.py` |
 | **Step 5** | 트랜잭션 CRUD + 정규화 규칙 | `transactions` API |
 | **Step 6** | Undo + Redis TTL | `POST /undo` |
 | **Step 7** | 감사로그 | `audit_logs` 기록 |
@@ -72,4 +74,4 @@
 
 ---
 
-*다음 단계: Step 4 - Idempotency 레이어*
+*다음 단계: Step 5 - 트랜잭션 CRUD + 정규화 규칙*
