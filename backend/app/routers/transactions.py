@@ -1,4 +1,4 @@
-"""POST/GET /transactions (Step 4-3: idempotency 적용)"""
+"""POST/GET /transactions (Step 5-2: 정규화 적용)"""
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.schemas.transaction import CreateTransactionRequest
 from app.services.idempotency import get_cached_tx_id, save_idempotency
+from app.services.normalizer import normalize_amount, normalize_category, normalize_date
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -20,12 +21,24 @@ async def create_transaction(
     """
     POST /transactions
     idem_key 있으면 중복 요청 시 캐시된 tx_id 반환.
+    date/amount/category는 서버에서 정규화 적용.
     """
     # idempotency: 캐시 확인
     if body.idem_key:
         cached = await get_cached_tx_id(session, body.user_id, body.idem_key)
         if cached:
             return {"tx_id": str(cached), "cached": True}
+
+    # 정규화 (서버 최종 책임)
+    try:
+        occurred_date = normalize_date(body.occurred_date)
+        amount = normalize_amount(body.amount)
+        category = normalize_category(body.category)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="금액은 0보다 커야 합니다")
 
     # 트랜잭션 생성
     result = await session.execute(
@@ -36,11 +49,11 @@ async def create_transaction(
         """),
         {
             "user_id": body.user_id,
-            "occurred_date": str(body.occurred_date),
+            "occurred_date": str(occurred_date),
             "type": body.type,
-            "amount": body.amount,
+            "amount": amount,
             "currency": body.currency,
-            "category": body.category,
+            "category": category,
             "merchant": body.merchant,
             "memo": body.memo,
             "source_text": body.source_text,
@@ -60,8 +73,54 @@ async def create_transaction(
 
 @router.get("")
 async def list_transactions(
-    from_date: str | None = Query(None, alias="from"),
-    to_date: str | None = Query(None, alias="to"),
-    category: str | None = None,
+    user_id: str = Query(..., description="사용자 ID"),
+    from_date: str | None = Query(None, alias="from", description="YYYY-MM-DD"),
+    to_date: str | None = Query(None, alias="to", description="YYYY-MM-DD"),
+    category: str | None = Query(None, description="카테고리 필터"),
+    session: AsyncSession = Depends(get_db),
 ):
-    return {"transactions": [], "message": "Step 5에서 구현 예정"}
+    """
+    GET /transactions
+    user_id 필수. from, to, category로 필터링.
+    """
+    # 동적 쿼리 구성
+    conditions = ["user_id = :user_id"]
+    params: dict = {"user_id": user_id}
+    if from_date:
+        conditions.append("occurred_date >= :from_date")
+        params["from_date"] = from_date
+    if to_date:
+        conditions.append("occurred_date <= :to_date")
+        params["to_date"] = to_date
+    if category:
+        conditions.append("category = :category")
+        params["category"] = category
+
+    where_clause = " AND ".join(conditions)
+    result = await session.execute(
+        text(f"""
+            SELECT tx_id, user_id, occurred_date, type, amount, currency, category, merchant, memo, source_text, created_at
+            FROM transactions
+            WHERE {where_clause}
+            ORDER BY occurred_date DESC, created_at DESC
+        """),
+        params,
+    )
+    rows = result.fetchall()
+    transactions_list = [
+        {
+            "tx_id": str(row[0]),
+            "user_id": row[1],
+            "occurred_date": str(row[2]),
+            "type": row[3],
+            "amount": row[4],
+            "currency": row[5],
+            "category": row[6],
+            "merchant": row[7],
+            "memo": row[8],
+            "source_text": row[9],
+            "created_at": row[10].isoformat() if row[10] else None,
+        }
+        for row in rows
+    ]
+    return {"transactions": transactions_list}

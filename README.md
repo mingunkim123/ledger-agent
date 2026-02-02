@@ -32,7 +32,9 @@
 | **Step 4-1** | DB 연결 설정 | ✅ `database.py`, `/health/db` |
 | **Step 4-2** | Idempotency 서비스 (get_cached, save) | ✅ `services/idempotency.py` |
 | **Step 4-3** | POST /transactions에 idempotency 적용 | ✅ `routers/transactions.py` |
-| **Step 5** | 트랜잭션 CRUD + 정규화 규칙 | `transactions` API |
+| **Step 5-1** | 정규화 헬퍼 (날짜/금액/카테고리) | ✅ `services/normalizer.py` |
+| **Step 5-2** | POST /transactions에 정규화 적용 | ✅ `routers/transactions.py` |
+| **Step 5-3** | GET /transactions 리스트 조회 | ✅ `routers/transactions.py` |
 | **Step 6** | Undo + Redis TTL | `POST /undo` |
 | **Step 7** | 감사로그 | `audit_logs` 기록 |
 | **Step 8** | LLM Orchestrator + Tool 호출 | `/chat` 엔드포인트 |
@@ -74,4 +76,4 @@
 
 ---
 
-*다음 단계: Step 5 - 트랜잭션 CRUD + 정규화 규칙*
+*다음 단계: Step 6 - Undo + Redis TTL*
