@@ -38,7 +38,9 @@
 | **Step 6-1** | Redis 연결 설정 | ✅ `redis_client.py` |
 | **Step 6-2** | Undo 토큰 저장 (POST /transactions 응답에 undo_token) | ✅ `services/undo.py` |
 | **Step 6-3** | POST /undo 구현 | ✅ `routers/undo.py` |
-| **Step 7** | 감사로그 | `audit_logs` 기록 |
+| **Step 7-1** | 감사로그 서비스 (log_audit 헬퍼) | ✅ `services/audit.py` |
+| **Step 7-2** | POST /transactions에 create 감사로그 적용 | ✅ `routers/transactions.py` |
+| **Step 7-3** | POST /undo에 undo 감사로그 적용 | ✅ `routers/undo.py` |
 | **Step 8** | LLM Orchestrator + Tool 호출 | `/chat` 엔드포인트 |
 | **Step 9** | Flutter 앱 기본 UI | 채팅 입력 + 응답 표시 |
 
@@ -78,4 +80,4 @@
 
 ---
 
-*다음 단계: Step 7 - 감사로그*
+*다음 단계: Step 8 - LLM Orchestrator + Tool 호출*

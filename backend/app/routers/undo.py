@@ -1,4 +1,4 @@
-"""POST /undo (Step 6-3) - 마지막 저장 취소"""
+"""POST /undo (Step 7-3) - 마지막 저장 취소 + 감사로그"""
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.schemas.undo import UndoRequest
+from app.services.audit import log_audit
 from app.services.undo import delete_undo_token, get_tx_id_from_undo_token
 
 router = APIRouter(prefix="/undo", tags=["undo"])
@@ -30,16 +31,43 @@ async def undo(
             detail="undo_token이 만료됐거나 잘못됐습니다. 5분 이내에 다시 시도해주세요.",
         )
 
-    # 트랜잭션 삭제 (idempotency_keys는 ON DELETE CASCADE로 자동 삭제)
+    # 삭제 전 트랜잭션 조회 (감사로그용)
     result = await session.execute(
-        text("DELETE FROM transactions WHERE tx_id = :tx_id RETURNING tx_id"),
+        text("""
+            SELECT tx_id, user_id, occurred_date, type, amount, currency, category, merchant, memo, source_text, created_at, updated_at
+            FROM transactions WHERE tx_id = :tx_id
+        """),
         {"tx_id": str(tx_id)},
     )
     row = result.fetchone()
     if not row:
-        # 이미 삭제됐거나 존재하지 않음
         await delete_undo_token(body.undo_token)
         raise HTTPException(status_code=404, detail="해당 트랜잭션을 찾을 수 없습니다.")
+
+    before_snapshot = {
+        "tx_id": str(row[0]),
+        "user_id": row[1],
+        "occurred_date": str(row[2]),
+        "type": row[3],
+        "amount": row[4],
+        "currency": row[5],
+        "category": row[6],
+        "merchant": row[7],
+        "memo": row[8],
+        "source_text": row[9],
+        "created_at": row[10].isoformat() if row[10] else None,
+        "updated_at": row[11].isoformat() if row[11] else None,
+    }
+    user_id = row[1]
+
+    # 감사로그: undo (삭제 전 기록)
+    await log_audit(session, user_id, "undo", tx_id=tx_id, before_snapshot=before_snapshot, after_snapshot=None)
+
+    # 트랜잭션 삭제 (idempotency_keys는 ON DELETE CASCADE로 자동 삭제)
+    await session.execute(
+        text("DELETE FROM transactions WHERE tx_id = :tx_id"),
+        {"tx_id": str(tx_id)},
+    )
 
     # DB 커밋 후 Redis 토큰 삭제 (1회용)
     await session.commit()

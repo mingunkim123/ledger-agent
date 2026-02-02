@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.schemas.transaction import CreateTransactionRequest
+from app.services.audit import log_audit
 from app.services.idempotency import get_cached_tx_id, save_idempotency
 from app.services.normalizer import normalize_amount, normalize_category, normalize_date
 from app.services.undo import save_undo_token
@@ -68,6 +69,21 @@ async def create_transaction(
     # idempotency: 저장
     if body.idem_key:
         await save_idempotency(session, body.user_id, body.idem_key, tx_id)
+
+    # 감사로그: create
+    after_snapshot = {
+        "tx_id": str(tx_id),
+        "user_id": body.user_id,
+        "occurred_date": str(occurred_date),
+        "type": body.type,
+        "amount": amount,
+        "currency": body.currency,
+        "category": category,
+        "merchant": body.merchant,
+        "memo": body.memo,
+        "source_text": body.source_text,
+    }
+    await log_audit(session, body.user_id, "create", tx_id=tx_id, after_snapshot=after_snapshot)
 
     # undo_token: Redis에 TTL 저장
     undo_token = str(uuid4())
