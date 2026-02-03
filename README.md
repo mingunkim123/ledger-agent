@@ -41,7 +41,9 @@
 | **Step 7-1** | 감사로그 서비스 (log_audit 헬퍼) | ✅ `services/audit.py` |
 | **Step 7-2** | POST /transactions에 create 감사로그 적용 | ✅ `routers/transactions.py` |
 | **Step 7-3** | POST /undo에 undo 감사로그 적용 | ✅ `routers/undo.py` |
-| **Step 8** | LLM Orchestrator + Tool 호출 | `/chat` 엔드포인트 |
+| **Step 8-1** | LLM 연결 설정 (OpenAI SDK, config) | `llm_client.py` |
+| **Step 8-2** | Tool 스키마 + 추출 로직 (create_transaction 도구) | ✅ `services/orchestrator.py` |
+| **Step 8-3** | POST /chat Orchestrator 완성 | ✅ `routers/chat.py` |
 | **Step 9** | Flutter 앱 기본 UI | 채팅 입력 + 응답 표시 |
 
 ---
@@ -80,4 +82,4 @@
 
 ---
 
-*다음 단계: Step 8 - LLM Orchestrator + Tool 호출*
+*다음 단계: Step 9 - Flutter 앱 기본 UI*
