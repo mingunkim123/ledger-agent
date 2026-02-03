@@ -44,7 +44,7 @@
 | **Step 8-1** | LLM 연결 설정 (OpenAI SDK, config) | `llm_client.py` |
 | **Step 8-2** | Tool 스키마 + 추출 로직 (create_transaction 도구) | ✅ `services/orchestrator.py` |
 | **Step 8-3** | POST /chat Orchestrator 완성 | ✅ `routers/chat.py` |
-| **Step 9** | Flutter 앱 기본 UI | 채팅 입력 + 응답 표시 |
+| **Step 9** | Flutter 앱 기본 UI | ✅ `flutter_app/` |
 
 ---
 
@@ -82,4 +82,4 @@
 
 ---
 
-*다음 단계: Step 9 - Flutter 앱 기본 UI*
+*Step 9 완료. MVP 백엔드 + Flutter 앱 구성 완료.*
