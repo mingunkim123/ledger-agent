@@ -20,6 +20,8 @@ class _ChatScreenState extends State<ChatScreen> {
   final _controller = TextEditingController();
   final _messages = <_MessageItem>[];
   var _loading = false;
+  /// true = 로컬(Ollama), false = 클라우드(서버 기본값)
+  var _useLocalModel = false;
 
   Future<void> _send() async {
     final text = _controller.text.trim();
@@ -31,7 +33,11 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     try {
       final api = ChatApi(baseUrl: widget.baseUrl);
-      final res = await api.sendMessage(userId: widget.userId, message: text);
+      final res = await api.sendMessage(
+        userId: widget.userId,
+        message: text,
+        llmProvider: _useLocalModel ? 'ollama' : null,
+      );
       setState(() {
         _messages.add(_MessageItem(
           isUser: false,
@@ -57,33 +63,77 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('가계부 에이전트'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: const Text('지출 추가'),
+        centerTitle: true,
+        elevation: 0,
+        scrolledUnderElevation: 2,
       ),
       body: Column(
         children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+            color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '말하듯이 적어보세요. 예: 오늘 점심 치킨 23,000원',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Text(
+                      '모델: ',
+                      style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('클라우드'), icon: Icon(Icons.cloud_rounded)),
+                        ButtonSegment(value: true, label: Text('로컬 (Ollama)'), icon: Icon(Icons.computer_rounded)),
+                      ],
+                      selected: {_useLocalModel},
+                      onSelectionChanged: (Set<bool> selected) {
+                        setState(() => _useLocalModel = selected.first);
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
               itemCount: _messages.length,
               itemBuilder: (context, i) {
                 final m = _messages[i];
                 return Align(
                   alignment: m.isUser ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
                       color: m.isUser
-                          ? Theme.of(context).colorScheme.primaryContainer
-                          : Theme.of(context).colorScheme.surfaceContainerHighest,
+                          ? theme.colorScheme.primaryContainer
+                          : theme.colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.shadowColor.withOpacity(0.06),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
+                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
                     child: Text(
                       m.text,
-                      style: Theme.of(context).textTheme.bodyLarge,
+                      style: theme.textTheme.bodyLarge,
                     ),
                   ),
                 );
@@ -91,33 +141,40 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           if (_loading)
-            const Padding(
-              padding: EdgeInsets.all(8.0),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: SizedBox(
                 width: 24,
                 height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
+                child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary),
               ),
             ),
           Padding(
-            padding: const EdgeInsets.all(12.0),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
                   child: TextField(
                     controller: _controller,
-                    decoration: const InputDecoration(
-                      hintText: '한 줄로 입력 (예: 오늘 치킨 23000원)',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: InputDecoration(
+                      hintText: '지출 내용 입력',
+                      filled: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     ),
                     onSubmitted: (_) => _send(),
                   ),
                 ),
-                const SizedBox(width: 8),
-                FilledButton(
+                const SizedBox(width: 12),
+                FilledButton.icon(
                   onPressed: _loading ? null : _send,
-                  child: const Text('전송'),
+                  icon: const Icon(Icons.send_rounded, size: 20),
+                  label: const Text('전송'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  ),
                 ),
               ],
             ),

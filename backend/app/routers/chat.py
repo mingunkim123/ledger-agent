@@ -3,6 +3,8 @@ from datetime import date
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
+from google.genai.errors import ClientError
+from openai import APIError as OpenAIAPIError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +14,7 @@ from app.services.audit import log_audit
 from app.services.idempotency import get_cached_tx_id, save_idempotency
 from app.services.normalizer import normalize_amount, normalize_category, normalize_date
 from app.services.orchestrator import extract_transaction
+from app.services.simple_parser import parse_simple_expense
 from app.services.undo import save_undo_token
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -27,8 +30,47 @@ async def chat(
     자연어 입력 → LLM 추출 → 정규화 → 저장 → 한 줄 확인 응답.
     애매하면 질문 1개만 반환 (저장 안 함).
     """
-    # LLM 추출
-    result = await extract_transaction(body.user_id, body.message)
+    # LLM 추출 (앱에서 선택한 provider 사용, 없으면 서버 기본값)
+    result = None
+    try:
+        result = await extract_transaction(
+            body.user_id,
+            body.message,
+            provider_override=body.llm_provider,
+        )
+    except (ClientError, OpenAIAPIError) as e:
+        code = getattr(e, "code", None) or getattr(e, "status_code", None)
+        err_str = str(e).lower()
+        if code == 400 or "400" in str(e) or "bad request" in err_str:
+            return {
+                "reply": "LLM 요청 형식 오류예요. .env에서 GROK_MODEL=grok-4, API 키가 올바른지 확인해 주세요.",
+                "tx_id": None,
+                "undo_token": None,
+                "needs_clarification": False,
+            }
+        if code == 429 or "429" in str(e) or "rate" in err_str or "quota" in err_str:
+            fallback = parse_simple_expense(body.message)
+            if fallback:
+                fallback["user_id"] = body.user_id
+                fallback["source_text"] = body.message
+                result = {"action": "create", "args": fallback}
+            else:
+                return {
+                    "reply": "무료 할당량을 초과했어요. 1분 뒤에 다시 시도해 주세요.",
+                    "tx_id": None,
+                    "undo_token": None,
+                    "needs_clarification": False,
+                }
+        if code == 403 or "403" in str(e) or "permission" in str(e).lower() or "auth" in str(e).lower():
+            return {
+                "reply": "API 키를 확인해 주세요. (Gemini: aistudio.google.com, Groq: console.groq.com, Grok: x.ai)",
+                "tx_id": None,
+                "undo_token": None,
+                "needs_clarification": False,
+            }
+        if result is None:
+            msg = getattr(e, "message", None) or str(e)
+            raise HTTPException(status_code=502, detail=f"LLM 오류: {msg}")
 
     if result["action"] == "clarify":
         return {
@@ -98,7 +140,7 @@ async def chat(
         """),
         {
             "user_id": user_id,
-            "occurred_date": str(occurred_date),
+            "occurred_date": occurred_date,
             "type": tx_type,
             "amount": amount,
             "currency": "KRW",

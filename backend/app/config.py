@@ -1,5 +1,10 @@
-"""환경 설정 (Step 3-3) - .env 로드"""
+"""환경 설정 - .env 로드"""
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
+
+# 실행 경로와 무관하게 항상 backend/.env 로드
+_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 
 class Settings(BaseSettings):
@@ -8,24 +13,40 @@ class Settings(BaseSettings):
     app_name: str = "가계부 에이전트"
     debug: bool = False
 
-    # DB (Step 5에서 연결)
-    database_url: str = "postgresql+asyncpg://user:pass@localhost:5432/expense_db"
+    # DB
+    database_url: str = "postgresql+asyncpg://myuser:password@localhost:5432/expense_db"
 
-    # JWT (Step 4 이후 사용)
+    # JWT
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
 
-    # Redis (Step 6 - Undo)
+    # Redis (Undo 토큰 TTL 등)
     redis_url: str = "redis://localhost:6379/0"
-    undo_ttl_seconds: int = 300  # 5분
+    undo_ttl_seconds: int = 300
 
-    # LLM (Step 8 - Google Gemini, 무료)
+    # LLM: ollama(로컬 GPU) | gemini | groq | grok
+    llm_provider: str = "groq"
+
+    # Ollama - 로컬 GPU 사용, API 키 불필요 (https://ollama.com)
+    ollama_base_url: str = "http://localhost:11434/v1"
+    ollama_model: str = "llama3.2"
+
+    # Gemini
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    # Groq
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
+
+    # Grok (xAI)
+    grok_api_key: str = ""
+    grok_model: str = "grok-4"
+
+    model_config = {
+        "env_file": str(_ENV_FILE),
+        "env_file_encoding": "utf-8",
+    }
 
 
 settings = Settings()

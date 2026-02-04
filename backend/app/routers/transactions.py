@@ -1,4 +1,5 @@
 """POST/GET /transactions (Step 6-2: undo_token 추가)"""
+from datetime import date
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -104,15 +105,15 @@ async def list_transactions(
     GET /transactions
     user_id 필수. from, to, category로 필터링.
     """
-    # 동적 쿼리 구성
+    # 동적 쿼리 구성 (asyncpg는 DATE에 date 객체 필요)
     conditions = ["user_id = :user_id"]
     params: dict = {"user_id": user_id}
     if from_date:
         conditions.append("occurred_date >= :from_date")
-        params["from_date"] = from_date
+        params["from_date"] = date.fromisoformat(from_date)
     if to_date:
         conditions.append("occurred_date <= :to_date")
-        params["to_date"] = to_date
+        params["to_date"] = date.fromisoformat(to_date)
     if category:
         conditions.append("category = :category")
         params["category"] = category

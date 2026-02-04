@@ -7,16 +7,19 @@ class ChatApi {
   ChatApi({this.baseUrl = 'http://localhost:8000'});
   final String baseUrl;
 
+  /// [llmProvider]: 'ollama'(로컬) | 'groq' | 'gemini' | 'grok'. null이면 서버 기본값.
   Future<ChatResponse> sendMessage({
     required String userId,
     required String message,
     String? idemKey,
+    String? llmProvider,
   }) async {
     final uri = Uri.parse('$baseUrl/chat');
     final body = jsonEncode({
       'user_id': userId,
       'message': message,
       if (idemKey != null) 'idem_key': idemKey,
+      if (llmProvider != null) 'llm_provider': llmProvider,
     });
     final response = await http.post(
       uri,

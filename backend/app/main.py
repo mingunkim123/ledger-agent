@@ -1,6 +1,13 @@
 """
 가계부 에이전트 - FastAPI 앱 (Step 6-1)
 """
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# 실행 경로와 무관하게 backend/.env 로드 (DB 사용자/비밀번호 적용)
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
