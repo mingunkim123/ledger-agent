@@ -20,6 +20,10 @@ flutter_app/*.iml
 flutter_app/.flutter-plugins
 flutter_app/.flutter-plugins-dependencies
 
+# Cursor / change reports (로컬용)
+.cursor/
+docs/change-reports/
+
 # IDE
 .idea/
 .vscode/
