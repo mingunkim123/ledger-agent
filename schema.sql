@@ -16,6 +16,7 @@ CREATE TABLE transactions (
     amount         INTEGER NOT NULL CHECK (amount > 0),
     currency       TEXT NOT NULL DEFAULT 'KRW',
     category       TEXT NOT NULL,
+    subcategory    TEXT NOT NULL DEFAULT '기타',
     merchant       TEXT,
     memo           TEXT,
     source_text    TEXT,
@@ -26,6 +27,7 @@ CREATE TABLE transactions (
 -- 조회용 인덱스
 CREATE INDEX idx_transactions_user_date ON transactions (user_id, occurred_date DESC);
 CREATE INDEX idx_transactions_user_category ON transactions (user_id, category);
+CREATE INDEX idx_transactions_user_subcategory ON transactions (user_id, subcategory);
 
 -- --------------------------------------------
 -- 2. idempotency_keys (중복 방지)

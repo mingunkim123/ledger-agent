@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../api/transactions_api.dart';
 import '../config.dart';
 import '../widgets/category_style.dart';
+import 'daily_calendar_screen.dart';
 import 'transaction_list_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -41,15 +42,22 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     try {
       final api = TransactionsApi(baseUrl: widget.baseUrl);
-      final summary = await api.getSummary(userId: widget.userId, month: _month);
+      final summary =
+          await api.getSummary(userId: widget.userId, month: _month);
       final now = DateTime.now();
       final isCurrentMonth = _month == DateFormat('yyyy-MM').format(now);
-      final endDay = isCurrentMonth ? now.day : DateTime(int.parse(_month.substring(0, 4)), int.parse(_month.substring(5, 7)) + 1, 0).day;
+      final endDay = isCurrentMonth
+          ? now.day
+          : DateTime(int.parse(_month.substring(0, 4)),
+                  int.parse(_month.substring(5, 7)) + 1, 0)
+              .day;
       final to = '$_month-${endDay.toString().padLeft(2, '0')}';
-      final list = await api.getTransactions(userId: widget.userId, from: '$_month-01', to: to);
+      final list = await api.getTransactions(
+          userId: widget.userId, from: '$_month-01', to: to);
+      final expenseList = list.where((tx) => tx.type == 'expense').toList();
       setState(() {
         _summary = summary;
-        _recent = list.take(10).toList();
+        _recent = expenseList.take(10).toList();
         _loading = false;
       });
     } catch (e) {
@@ -102,11 +110,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(_error!, style: TextStyle(color: theme.colorScheme.onErrorContainer)),
+                          Text(_error!,
+                              style: TextStyle(
+                                  color: theme.colorScheme.onErrorContainer)),
                           const SizedBox(height: 12),
                           Text(
                             'PC와 같은 Wi‑Fi인지, lib/config.dart 주소가 PC IP인지 확인하세요.',
-                            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onErrorContainer.withOpacity(0.9)),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onErrorContainer
+                                    .withOpacity(0.9)),
                           ),
                           const SizedBox(height: 12),
                           FilledButton.icon(
@@ -129,7 +141,32 @@ class _HomeScreenState extends State<HomeScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text('카테고리별', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('날짜별 지출',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600)),
+                    TextButton(
+                      onPressed: _openDailyCalendar,
+                      child: const Text('달력 보기'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                child: _buildDailyCalendarEntry(theme),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text('카테고리별',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w600)),
               ),
             ),
             SliverToBoxAdapter(
@@ -144,11 +181,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('최근 내역', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    Text('최근 내역',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600)),
                     TextButton(
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => TransactionListScreen(userId: widget.userId, baseUrl: widget.baseUrl),
+                          builder: (_) => TransactionListScreen(
+                              userId: widget.userId, baseUrl: widget.baseUrl),
                         ),
                       ),
                       child: const Text('전체보기'),
@@ -171,19 +211,26 @@ class _HomeScreenState extends State<HomeScreen> {
                     final tx = _recent[i];
                     final style = categoryStyle(tx.category);
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 4),
                       elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: style.color.withOpacity(0.2),
                           child: Icon(style.icon, color: style.color, size: 22),
                         ),
-                        title: Text(tx.merchant ?? tx.category, maxLines: 1, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(tx.occurredDate, style: theme.textTheme.bodySmall),
+                        title: Text(tx.merchant ?? tx.category,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(
+                          '${tx.occurredDate} · ${tx.category}/${tx.subcategory}',
+                          style: theme.textTheme.bodySmall,
+                        ),
                         trailing: Text(
                           '${_currencyFormat.format(tx.amount)}원',
-                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ),
                     );
@@ -200,7 +247,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildMonthCard(ThemeData theme) {
     final total = _summary?.total ?? 0;
-    final monthLabel = _month.length >= 7 ? '${_month.substring(0, 4)}년 ${_month.substring(5)}월' : _month;
+    final monthLabel = _month.length >= 7
+        ? '${_month.substring(0, 4)}년 ${_month.substring(5)}월'
+        : _month;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
       decoration: BoxDecoration(
@@ -224,7 +273,10 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(monthLabel, style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer.withOpacity(0.9))),
+          Text(monthLabel,
+              style: theme.textTheme.titleMedium?.copyWith(
+                  color:
+                      theme.colorScheme.onPrimaryContainer.withOpacity(0.9))),
           const SizedBox(height: 8),
           Text(
             '${_currencyFormat.format(total)}원',
@@ -234,7 +286,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          Text('이번 달 지출', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onPrimaryContainer.withOpacity(0.8))),
+          Text('이번 달 지출',
+              style: theme.textTheme.bodySmall?.copyWith(
+                  color:
+                      theme.colorScheme.onPrimaryContainer.withOpacity(0.8))),
         ],
       ),
     );
@@ -269,10 +324,55 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Icon(style.icon, color: style.color, size: 20),
               ),
               title: Text(e.key),
-              subtitle: total > 0 ? LinearProgressIndicator(value: pct, backgroundColor: theme.colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(4)) : null,
-              trailing: Text('${_currencyFormat.format(e.value)}원', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+              subtitle: total > 0
+                  ? LinearProgressIndicator(
+                      value: pct,
+                      backgroundColor:
+                          theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(4))
+                  : null,
+              trailing: Text('${_currencyFormat.format(e.value)}원',
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600)),
             );
           }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDailyCalendarEntry(ThemeData theme) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        onTap: _openDailyCalendar,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: CircleAvatar(
+          radius: 20,
+          backgroundColor: theme.colorScheme.secondaryContainer,
+          child: Icon(Icons.calendar_month,
+              size: 20, color: theme.colorScheme.onSecondaryContainer),
+        ),
+        title: Text('달력에서 날짜 선택',
+            style: theme.textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w600)),
+        subtitle: Text(
+          '특정 날짜를 누르면 카테고리 분석이 보이고, 등록 안 된 날짜는 0원으로 표시됩니다.',
+          style: theme.textTheme.bodySmall,
+        ),
+        trailing: Icon(Icons.chevron_right, color: theme.colorScheme.outline),
+      ),
+    );
+  }
+
+  void _openDailyCalendar() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DailyCalendarScreen(
+          userId: widget.userId,
+          baseUrl: widget.baseUrl,
+          initialMonth: _month,
         ),
       ),
     );

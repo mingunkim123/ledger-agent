@@ -11,9 +11,11 @@ class TransactionListScreen extends StatefulWidget {
     super.key,
     this.userId = 'user1',
     this.baseUrl = kApiBaseUrl,
+    this.fixedDate,
   });
   final String userId;
   final String baseUrl;
+  final String? fixedDate;
 
   @override
   State<TransactionListScreen> createState() => _TransactionListScreenState();
@@ -21,6 +23,8 @@ class TransactionListScreen extends StatefulWidget {
 
 class _TransactionListScreenState extends State<TransactionListScreen> {
   List<Transaction> _list = [];
+  Map<String, int> _byCategory = {};
+  int _expenseTotal = 0;
   String _month = '';
   String? _category;
   var _loading = true;
@@ -29,9 +33,14 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
   @override
   void initState() {
     super.initState();
-    _month = DateFormat('yyyy-MM').format(DateTime.now());
+    _month = widget.fixedDate != null && widget.fixedDate!.length >= 7
+        ? widget.fixedDate!.substring(0, 7)
+        : DateFormat('yyyy-MM').format(DateTime.now());
     _load();
   }
+
+  bool get _isFixedDateMode =>
+      widget.fixedDate != null && widget.fixedDate!.isNotEmpty;
 
   Future<void> _load() async {
     setState(() {
@@ -40,19 +49,36 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
     });
     try {
       final api = TransactionsApi(baseUrl: widget.baseUrl);
-      final year = int.parse(_month.substring(0, 4));
-      final m = int.parse(_month.substring(5, 7));
-      final lastDay = DateTime(year, m + 1, 0).day;
-      final from = '$_month-01';
-      final to = '$_month-${lastDay.toString().padLeft(2, '0')}';
+      String from;
+      String to;
+      if (_isFixedDateMode) {
+        from = widget.fixedDate!;
+        to = widget.fixedDate!;
+      } else {
+        final year = int.parse(_month.substring(0, 4));
+        final m = int.parse(_month.substring(5, 7));
+        final lastDay = DateTime(year, m + 1, 0).day;
+        from = '$_month-01';
+        to = '$_month-${lastDay.toString().padLeft(2, '0')}';
+      }
       final list = await api.getTransactions(
         userId: widget.userId,
         from: from,
         to: to,
-        category: _category,
+        category: _isFixedDateMode ? null : _category,
       );
+      final expenseList = list.where((tx) => tx.type == 'expense').toList();
+      final byCategory = <String, int>{};
+      var total = 0;
+      for (final tx in expenseList) {
+        total += tx.amount;
+        byCategory.update(tx.category, (prev) => prev + tx.amount,
+            ifAbsent: () => tx.amount);
+      }
       setState(() {
-        _list = list;
+        _list = expenseList;
+        _byCategory = byCategory;
+        _expenseTotal = total;
         _loading = false;
       });
     } catch (e) {
@@ -68,18 +94,23 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final title = _isFixedDateMode
+        ? '${_formatDateLabel(widget.fixedDate!)} 지출'
+        : '지출 내역';
     return Scaffold(
       appBar: AppBar(
-        title: const Text('지출 내역'),
+        title: Text(title),
         centerTitle: true,
         elevation: 0,
         scrolledUnderElevation: 2,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () => _showFilter(context),
-          ),
-        ],
+        actions: _isFixedDateMode
+            ? null
+            : [
+                IconButton(
+                  icon: const Icon(Icons.filter_list),
+                  onPressed: () => _showFilter(context),
+                ),
+              ],
       ),
       body: _loading && _list.isEmpty
           ? const Center(child: CircularProgressIndicator())
@@ -97,7 +128,10 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(_error!, style: TextStyle(color: theme.colorScheme.onErrorContainer)),
+                                Text(_error!,
+                                    style: TextStyle(
+                                        color: theme
+                                            .colorScheme.onErrorContainer)),
                                 const SizedBox(height: 12),
                                 FilledButton.icon(
                                   onPressed: _load,
@@ -117,47 +151,129 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                             Center(
                               child: Column(
                                 children: [
-                                  Icon(Icons.receipt_long, size: 64, color: theme.colorScheme.outline),
+                                  Icon(Icons.receipt_long,
+                                      size: 64,
+                                      color: theme.colorScheme.outline),
                                   const SizedBox(height: 16),
-                                  Text('이 기간 지출 내역이 없습니다.', style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.outline)),
+                                  Text('이 기간 지출 내역이 없습니다.',
+                                      style: theme.textTheme.bodyLarge
+                                          ?.copyWith(
+                                              color:
+                                                  theme.colorScheme.outline)),
                                 ],
                               ),
                             ),
                           ],
                         )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                          itemCount: _list.length,
-                          itemBuilder: (context, i) {
-                            final tx = _list[i];
-                            final style = categoryStyle(tx.category);
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: style.color.withOpacity(0.2),
-                                  child: Icon(style.icon, color: style.color, size: 22),
-                                ),
-                                title: Text(tx.merchant ?? tx.category, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                subtitle: Text(
-                                  '${tx.occurredDate} · ${tx.category}',
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                                trailing: Text(
-                                  '- ${_currencyFormat.format(tx.amount)}원',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: theme.colorScheme.error,
+                      : ListView(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 8, horizontal: 16),
+                          children: [
+                            if (_isFixedDateMode)
+                              _buildCategorySummaryCard(theme),
+                            ..._list.map((tx) {
+                              final style = categoryStyle(tx.category);
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                                child: ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor:
+                                        style.color.withOpacity(0.2),
+                                    child: Icon(style.icon,
+                                        color: style.color, size: 22),
+                                  ),
+                                  title: Text(tx.merchant ?? tx.subcategory,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis),
+                                  subtitle: Text(
+                                    _isFixedDateMode
+                                        ? '${tx.category} · ${tx.subcategory}'
+                                        : '${tx.occurredDate} · ${tx.category}/${tx.subcategory}',
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                  trailing: Text(
+                                    '- ${_currencyFormat.format(tx.amount)}원',
+                                    style:
+                                        theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: theme.colorScheme.error,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
+                              );
+                            }),
+                          ],
                         ),
             ),
     );
+  }
+
+  Widget _buildCategorySummaryCard(ThemeData theme) {
+    if (_byCategory.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final entries = _byCategory.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          children: [
+            ListTile(
+              title: Text(
+                '카테고리별 합계',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              trailing: Text(
+                '${_currencyFormat.format(_expenseTotal)}원',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+            ...entries.map((entry) {
+              final style = categoryStyle(entry.key);
+              final progress =
+                  _expenseTotal > 0 ? entry.value / _expenseTotal : 0.0;
+              return ListTile(
+                leading: CircleAvatar(
+                  radius: 20,
+                  backgroundColor: style.color.withOpacity(0.2),
+                  child: Icon(style.icon, color: style.color, size: 20),
+                ),
+                title: Text(entry.key),
+                subtitle: _expenseTotal > 0
+                    ? LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor:
+                            theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4),
+                      )
+                    : null,
+                trailing: Text(
+                  '${_currencyFormat.format(entry.value)}원',
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDateLabel(String ymd) {
+    final dt = DateTime.tryParse(ymd);
+    if (dt == null) return ymd;
+    const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+    return '${dt.month}월 ${dt.day}일 (${weekdays[dt.weekday - 1]})';
   }
 
   Future<void> _showFilter(BuildContext context) async {
@@ -168,7 +284,20 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
       final d = DateTime(now.year, now.month - i, 1);
       months.add(DateFormat('yyyy-MM').format(d));
     }
-    final categories = ['식비', '교통', '쇼핑', '문화', '의료', '교육', '통신', '기타'];
+    final categories = [
+      '식비',
+      '카페',
+      '교통',
+      '쇼핑',
+      '생활',
+      '문화',
+      '여행',
+      '의료',
+      '교육',
+      '통신',
+      '구독',
+      '기타',
+    ];
     await showModalBottomSheet(
       context: context,
       builder: (ctx) {
@@ -180,7 +309,9 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('기간', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  Text('기간',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -200,7 +331,9 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                     }).toList(),
                   ),
                   const SizedBox(height: 16),
-                  Text('카테고리', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  Text('카테고리',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,

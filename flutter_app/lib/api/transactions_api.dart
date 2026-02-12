@@ -23,20 +23,26 @@ class TransactionsApi {
     if (category != null) q.add('category=${Uri.encodeComponent(category)}');
     final uri = Uri.parse('$baseUrl/transactions?${q.join('&')}');
     final response = await http.get(uri).timeout(_kTimeout, onTimeout: () {
-      throw TimeoutException('서버에 연결할 수 없습니다. 주소($baseUrl)와 백엔드 실행 여부를 확인해 주세요.');
+      throw TimeoutException(
+          '서버에 연결할 수 없습니다. 주소($baseUrl)와 백엔드 실행 여부를 확인해 주세요.');
     });
     if (response.statusCode != 200) {
       throw Exception('${response.statusCode}: ${response.body}');
     }
     final map = jsonDecode(response.body) as Map<String, dynamic>;
     final list = map['transactions'] as List<dynamic>? ?? [];
-    return list.map((e) => Transaction.fromJson(e as Map<String, dynamic>)).toList();
+    return list
+        .map((e) => Transaction.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
-  Future<Summary> getSummary({required String userId, required String month}) async {
-    final uri = Uri.parse('$baseUrl/summary?month=$month&user_id=${Uri.encodeComponent(userId)}');
+  Future<Summary> getSummary(
+      {required String userId, required String month}) async {
+    final uri = Uri.parse(
+        '$baseUrl/summary?month=$month&user_id=${Uri.encodeComponent(userId)}');
     final response = await http.get(uri).timeout(_kTimeout, onTimeout: () {
-      throw TimeoutException('서버에 연결할 수 없습니다. 주소($baseUrl)와 백엔드 실행 여부를 확인해 주세요.');
+      throw TimeoutException(
+          '서버에 연결할 수 없습니다. 주소($baseUrl)와 백엔드 실행 여부를 확인해 주세요.');
     });
     if (response.statusCode != 200) {
       throw Exception('${response.statusCode}: ${response.body}');
@@ -55,6 +61,7 @@ class Transaction {
     required this.amount,
     required this.currency,
     required this.category,
+    required this.subcategory,
     this.merchant,
     this.memo,
     this.sourceText,
@@ -67,6 +74,7 @@ class Transaction {
   final int amount;
   final String currency;
   final String category;
+  final String subcategory;
   final String? merchant;
   final String? memo;
   final String? sourceText;
@@ -78,9 +86,12 @@ class Transaction {
       userId: json['user_id'] as String? ?? '',
       occurredDate: json['occurred_date'] as String? ?? '',
       type: json['type'] as String? ?? 'expense',
-      amount: (json['amount'] is int) ? json['amount'] as int : int.tryParse(json['amount'].toString()) ?? 0,
+      amount: (json['amount'] is int)
+          ? json['amount'] as int
+          : int.tryParse(json['amount'].toString()) ?? 0,
       currency: json['currency'] as String? ?? 'KRW',
       category: json['category'] as String? ?? '',
+      subcategory: json['subcategory'] as String? ?? '기타',
       merchant: json['merchant'] as String?,
       memo: json['memo'] as String?,
       sourceText: json['source_text'] as String?,
@@ -103,11 +114,15 @@ class Summary {
     final byCat = json['by_category'] as Map<String, dynamic>? ?? {};
     final map = <String, int>{};
     for (final e in byCat.entries) {
-      map[e.key as String] = (e.value is int) ? e.value as int : int.tryParse(e.value.toString()) ?? 0;
+      map[e.key] = (e.value is int)
+          ? e.value as int
+          : int.tryParse(e.value.toString()) ?? 0;
     }
     return Summary(
       month: json['month'] as String? ?? '',
-      total: (json['total'] is int) ? json['total'] as int : int.tryParse(json['total'].toString()) ?? 0,
+      total: (json['total'] is int)
+          ? json['total'] as int
+          : int.tryParse(json['total'].toString()) ?? 0,
       byCategory: map,
     );
   }
