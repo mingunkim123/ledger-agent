@@ -15,8 +15,10 @@ class SummaryView(APIView):
         query_serializer.is_valid(raise_exception=True)
         params = query_serializer.validated_data
 
+        user_id = str(request.user.id)  # ← JWT 토큰에서 추출
+
         result = TransactionService.get_summary(
-            user_id=params["user_id"],
+            user_id=user_id,
             month=params["month"],
         )
 

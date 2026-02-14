@@ -9,6 +9,7 @@ urlpatterns = [
     path("", RootView.as_view()),
     # API v1
     path("api/v1/", include("ledger.urls")),
+    path("api/v1/accounts/", include("accounts.urls")),
     # 헬스체크 (버저닝 없이 직접 접근 가능)
     path("health/", HealthView.as_view()),
     path("health/db/", HealthDBView.as_view()),

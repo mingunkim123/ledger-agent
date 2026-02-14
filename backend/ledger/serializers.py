@@ -13,7 +13,6 @@ from ledger.models import Transaction
 class ChatRequestSerializer(serializers.Serializer):
     """POST /chat/ 요청"""
 
-    user_id = serializers.CharField()
     message = serializers.CharField()
     session_id = serializers.CharField(required=False, allow_null=True, default=None)
     idem_key = serializers.CharField(required=False, allow_null=True, default=None)
@@ -23,7 +22,6 @@ class ChatRequestSerializer(serializers.Serializer):
 class CreateTransactionSerializer(serializers.Serializer):
     """POST /transactions/ 요청 — 다양한 포맷 허용 (정규화는 서비스 계층에서 처리)"""
 
-    user_id = serializers.CharField()
     occurred_date = serializers.CharField()  # "어제", "2026-02-13" 등 → normalizer 처리
     type = serializers.ChoiceField(choices=["expense", "income"])
     amount = serializers.CharField()  # "2.3만", "23000" 등 → normalizer 처리
@@ -50,7 +48,6 @@ class UndoRequestSerializer(serializers.Serializer):
 class TransactionListQuerySerializer(serializers.Serializer):
     """GET /transactions/ 쿼리 파라미터"""
 
-    user_id = serializers.CharField()
     from_date = serializers.DateField(required=False, source="from", default=None)
     to_date = serializers.DateField(required=False, source="to", default=None)
     category = serializers.CharField(required=False, default=None)
@@ -59,9 +56,6 @@ class TransactionListQuerySerializer(serializers.Serializer):
     def to_internal_value(self, data):
         """쿼리 파라미터에서 'from', 'to' 키를 'from_date', 'to_date'로 매핑"""
         ret = {}
-        ret["user_id"] = data.get("user_id")
-        if not ret["user_id"]:
-            raise serializers.ValidationError({"user_id": "user_id는 필수입니다"})
         ret["from_date"] = data.get("from")
         ret["to_date"] = data.get("to")
         ret["category"] = data.get("category")
@@ -69,13 +63,32 @@ class TransactionListQuerySerializer(serializers.Serializer):
 
 
 class SummaryQuerySerializer(serializers.Serializer):
-    """GET /summary/ 쿼리 파라미터"""
+    """GET /summary/ 쿼리 파라미터 — month 또는 from_date/to_date 기간 지원"""
 
     month = serializers.RegexField(
         regex=r"^\d{4}-\d{2}$",
+        required=False,
+        default=None,
+        allow_null=True,
         error_messages={"invalid": "month는 YYYY-MM 형식이어야 합니다"},
     )
-    user_id = serializers.CharField()
+    from_date = serializers.DateField(required=False, default=None)
+    to_date = serializers.DateField(required=False, default=None)
+
+    def validate(self, data):
+        """month 또는 from_date/to_date 쌍 중 하나는 필수"""
+        if not data.get("month") and not (
+            data.get("from_date") and data.get("to_date")
+        ):
+            raise serializers.ValidationError(
+                "month 또는 from_date/to_date 쌍 중 하나는 필수입니다"
+            )
+        if data.get("from_date") and data.get("to_date"):
+            if data["from_date"] > data["to_date"]:
+                raise serializers.ValidationError(
+                    "from_date는 to_date보다 이전이어야 합니다"
+                )
+        return data
 
 
 # ──────────────────────────────────────────

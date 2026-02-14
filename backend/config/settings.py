@@ -3,6 +3,8 @@ Django 설정 - 가계부 에이전트
 기존 FastAPI 환경변수(.env) 호환
 """
 
+from datetime import timedelta
+
 import dj_database_url
 from pathlib import Path
 
@@ -31,6 +33,8 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
     "rest_framework",
+    "rest_framework_simplejwt",
+    "accounts",
     "ledger",
 ]
 
@@ -41,6 +45,7 @@ MIDDLEWARE = [
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
+AUTH_USER_MODEL = "accounts.User"
 
 # ── DB ──
 _raw_db_url = env(
@@ -60,7 +65,19 @@ REST_FRAMEWORK = {
     "DEFAULT_PARSER_CLASSES": [
         "rest_framework.parsers.JSONParser",
     ],
-    "UNAUTHENTICATED_USER": None,
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
+
+# ── JWT 설정 ──
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 # ── Redis ──

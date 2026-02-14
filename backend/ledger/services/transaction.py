@@ -213,21 +213,37 @@ class TransactionService:
         }
 
     @staticmethod
-    def get_summary(user_id: str, month: str) -> dict:
+    def get_summary(
+        user_id: str,
+        month: str | None = None,
+        from_date=None,
+        to_date=None,
+    ) -> dict:
         """
-        월별 카테고리별 지출 합계.
+        기간별 카테고리별 지출 합계.
 
         Args:
             user_id: 사용자 ID
-            month: "YYYY-MM" 형식
+            month: "YYYY-MM" 형식 (옵션)
+            from_date: 시작일 (옵션, date 객체)
+            to_date: 종료일 (옵션, date 객체)
+
+        month 또는 from_date/to_date 쌍 중 하나가 필요합니다.
+        from_date/to_date가 있으면 month보다 우선합니다.
 
         Returns:
-            dict with month, total, by_category
+            dict with label, total, by_category
         """
-        year, m = int(month[:4]), int(month[5:7])
-        from_date = date(year, m, 1)
-        last_day = calendar.monthrange(year, m)[1]
-        to_date = date(year, m, last_day)
+        if from_date and to_date:
+            label = f"{from_date} ~ {to_date}"
+        elif month:
+            year, m = int(month[:4]), int(month[5:7])
+            from_date = date(year, m, 1)
+            last_day = calendar.monthrange(year, m)[1]
+            to_date = date(year, m, last_day)
+            label = month
+        else:
+            raise ValueError("month 또는 from_date/to_date 필수")
 
         qs = (
             Transaction.objects.filter(
@@ -244,4 +260,4 @@ class TransactionService:
         by_category = {row["category"]: row["cat_total"] for row in qs}
         total = sum(by_category.values())
 
-        return {"month": month, "total": total, "by_category": by_category}
+        return {"label": label, "total": total, "by_category": by_category}

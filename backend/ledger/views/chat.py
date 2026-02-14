@@ -19,7 +19,7 @@ class ChatView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        user_id = data["user_id"]
+        user_id = str(request.user.id)  # ← JWT 토큰에서 추출
         message = data["message"]
         idem_key = data.get("idem_key")
         llm_provider = data.get("llm_provider")

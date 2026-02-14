@@ -21,9 +21,11 @@ class TransactionListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        user_id = str(request.user.id)  # ← JWT 토큰에서 추출
+
         try:
             result = TransactionService.create_transaction(
-                user_id=data["user_id"],
+                user_id=user_id,
                 args=data,
                 idem_key=data.get("idem_key"),
             )
@@ -49,8 +51,10 @@ class TransactionListCreateView(APIView):
         query_serializer.is_valid(raise_exception=True)
         params = query_serializer.validated_data
 
+        user_id = str(request.user.id)  # ← JWT 토큰에서 추출
+
         transactions = TransactionService.list_transactions(
-            user_id=params["user_id"],
+            user_id=user_id,
             from_date=params.get("from_date"),
             to_date=params.get("to_date"),
             category=params.get("category"),
