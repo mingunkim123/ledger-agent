@@ -147,7 +147,9 @@ def normalize_category(raw: str) -> str:
     for keywords, (category, _) in _CATEGORY_SUBCATEGORY_RULES:
         if any(keyword in s for keyword in keywords):
             return category
-    return s if s in CATEGORIES else "기타"
+
+    # 규칙/별칭에 없으면 그냥 원래 입력값 사용 (너무 강제하지 않음)
+    return s[:10]  # 너무 길면 자름
 
 
 def normalize_subcategory(raw: str | None) -> str:

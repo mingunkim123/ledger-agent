@@ -2,18 +2,19 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:provider/provider.dart';
+
 import '../api/transactions_api.dart';
 import '../config.dart';
+import '../services/auth_service.dart';
 import '../widgets/category_style.dart';
 
 class TransactionListScreen extends StatefulWidget {
   const TransactionListScreen({
     super.key,
-    this.userId = 'user1',
     this.baseUrl = kApiBaseUrl,
     this.fixedDate,
   });
-  final String userId;
   final String baseUrl;
   final String? fixedDate;
 
@@ -29,6 +30,10 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
   String? _category;
   var _loading = true;
   String? _error;
+
+  // ── 커스텀 기간 ──
+  bool _isCustomRange = false;
+  DateTimeRange? _customRange;
 
   @override
   void initState() {
@@ -54,6 +59,9 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
       if (_isFixedDateMode) {
         from = widget.fixedDate!;
         to = widget.fixedDate!;
+      } else if (_isCustomRange && _customRange != null) {
+        from = DateFormat('yyyy-MM-dd').format(_customRange!.start);
+        to = DateFormat('yyyy-MM-dd').format(_customRange!.end);
       } else {
         final year = int.parse(_month.substring(0, 4));
         final m = int.parse(_month.substring(5, 7));
@@ -61,8 +69,11 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
         from = '$_month-01';
         to = '$_month-${lastDay.toString().padLeft(2, '0')}';
       }
+      final token = context.read<AuthService>().token;
+      if (token == null) return;
+
       final list = await api.getTransactions(
-        userId: widget.userId,
+        token: token,
         from: from,
         to: to,
         category: _isFixedDateMode ? null : _category,
@@ -94,9 +105,16 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final title = _isFixedDateMode
-        ? '${_formatDateLabel(widget.fixedDate!)} 지출'
-        : '지출 내역';
+    String title;
+    if (_isFixedDateMode) {
+      title = '${_formatDateLabel(widget.fixedDate!)} 지출';
+    } else if (_isCustomRange && _customRange != null) {
+      final fmt = DateFormat('M월 d일');
+      title =
+          '${fmt.format(_customRange!.start)} ~ ${fmt.format(_customRange!.end)}';
+    } else {
+      title = '지출 내역';
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
@@ -276,6 +294,32 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
     return '${dt.month}월 ${dt.day}일 (${weekdays[dt.weekday - 1]})';
   }
 
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now();
+    final initial = _customRange ??
+        DateTimeRange(
+          start: DateTime(now.year, now.month, 1),
+          end: now,
+        );
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 1, 12, 31),
+      initialDateRange: initial,
+      locale: const Locale('ko', 'KR'),
+      helpText: '기간 선택',
+      saveText: '적용',
+      cancelText: '취소',
+    );
+    if (picked != null) {
+      setState(() {
+        _customRange = picked;
+        _isCustomRange = true;
+      });
+      _load();
+    }
+  }
+
   Future<void> _showFilter(BuildContext context) async {
     final theme = Theme.of(context);
     final months = <String>[];
@@ -316,19 +360,38 @@ class _TransactionListScreenState extends State<TransactionListScreen> {
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: months.map((m) {
-                      final selected = _month == m;
-                      return FilterChip(
-                        label: Text(m),
-                        selected: selected,
+                    children: [
+                      // 커스텀 기간 선택 칩
+                      FilterChip(
+                        avatar: const Icon(Icons.date_range, size: 18),
+                        label: Text(_isCustomRange && _customRange != null
+                            ? '${DateFormat('M/d').format(_customRange!.start)} ~ ${DateFormat('M/d').format(_customRange!.end)}'
+                            : '기간 직접 선택'),
+                        selected: _isCustomRange,
                         onSelected: (_) {
-                          setState(() => _month = m);
-                          setModal(() {});
-                          _load();
                           Navigator.pop(ctx);
+                          _pickCustomRange();
                         },
-                      );
-                    }).toList(),
+                      ),
+                      // 월 선택 칩들
+                      ...months.map((m) {
+                        final selected = !_isCustomRange && _month == m;
+                        return FilterChip(
+                          label: Text(m),
+                          selected: selected,
+                          onSelected: (_) {
+                            setState(() {
+                              _month = m;
+                              _isCustomRange = false;
+                              _customRange = null;
+                            });
+                            setModal(() {});
+                            _load();
+                            Navigator.pop(ctx);
+                          },
+                        );
+                      }),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   Text('카테고리',

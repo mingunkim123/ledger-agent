@@ -1,11 +1,13 @@
 """루트 URL 라우팅 — API 버저닝 포함"""
 
+from django.contrib import admin
 from django.urls import include, path
 
 from ledger.views import HealthDBView, HealthView, RootView
 
 urlpatterns = [
     # 루트
+    path("admin/", admin.site.urls),
     path("", RootView.as_view()),
     # API v1
     path("api/v1/", include("ledger.urls")),

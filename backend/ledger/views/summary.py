@@ -19,7 +19,9 @@ class SummaryView(APIView):
 
         result = TransactionService.get_summary(
             user_id=user_id,
-            month=params["month"],
+            month=params.get("month"),
+            from_date=params.get("from_date"),
+            to_date=params.get("to_date"),
         )
 
         return Response(result)

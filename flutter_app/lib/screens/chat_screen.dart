@@ -1,15 +1,16 @@
 /// 채팅 화면 (Step 9) - 한 줄 입력 + 응답 표시
 import 'package:flutter/material.dart';
 
+import 'package:provider/provider.dart';
+
 import '../api/chat_api.dart';
+import '../services/auth_service.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
     super.key,
-    this.userId = 'user1',
     this.baseUrl = 'http://localhost:8000',
   });
-  final String userId;
   final String baseUrl;
 
   @override
@@ -20,6 +21,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _controller = TextEditingController();
   final _messages = <_MessageItem>[];
   var _loading = false;
+
   /// true = 로컬(Ollama), false = 클라우드(서버 기본값)
   var _useLocalModel = false;
 
@@ -33,8 +35,11 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     try {
       final api = ChatApi(baseUrl: widget.baseUrl);
+      final token = context.read<AuthService>().token;
+      if (token == null) return;
+
       final res = await api.sendMessage(
-        userId: widget.userId,
+        token: token,
         message: text,
         llmProvider: _useLocalModel ? 'ollama' : null,
       );
@@ -82,19 +87,27 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 Text(
                   '말하듯이 적어보세요. 예: 오늘 점심 치킨 23,000원',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 10),
                 Row(
                   children: [
                     Text(
                       '모델: ',
-                      style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      style: theme.textTheme.labelMedium
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                     SegmentedButton<bool>(
                       segments: const [
-                        ButtonSegment(value: false, label: Text('클라우드'), icon: Icon(Icons.cloud_rounded)),
-                        ButtonSegment(value: true, label: Text('로컬 (Ollama)'), icon: Icon(Icons.computer_rounded)),
+                        ButtonSegment(
+                            value: false,
+                            label: Text('클라우드'),
+                            icon: Icon(Icons.cloud_rounded)),
+                        ButtonSegment(
+                            value: true,
+                            label: Text('로컬 (Ollama)'),
+                            icon: Icon(Icons.computer_rounded)),
                       ],
                       selected: {_useLocalModel},
                       onSelectionChanged: (Set<bool> selected) {
@@ -113,10 +126,12 @@ class _ChatScreenState extends State<ChatScreen> {
               itemBuilder: (context, i) {
                 final m = _messages[i];
                 return Align(
-                  alignment: m.isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  alignment:
+                      m.isUser ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
                       color: m.isUser
                           ? theme.colorScheme.primaryContainer
@@ -130,7 +145,8 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ],
                     ),
-                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
+                    constraints: BoxConstraints(
+                        maxWidth: MediaQuery.of(context).size.width * 0.8),
                     child: Text(
                       m.text,
                       style: theme.textTheme.bodyLarge,
@@ -146,7 +162,8 @@ class _ChatScreenState extends State<ChatScreen> {
               child: SizedBox(
                 width: 24,
                 height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: theme.colorScheme.primary),
               ),
             ),
           Padding(
@@ -160,8 +177,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     decoration: InputDecoration(
                       hintText: '지출 내용 입력',
                       filled: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 14),
                     ),
                     onSubmitted: (_) => _send(),
                   ),
@@ -172,8 +191,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   icon: const Icon(Icons.send_rounded, size: 20),
                   label: const Text('전송'),
                   style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24)),
                   ),
                 ),
               ],

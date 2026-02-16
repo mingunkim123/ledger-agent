@@ -12,17 +12,19 @@ class TransactionsApi {
   final String baseUrl;
 
   Future<List<Transaction>> getTransactions({
-    required String userId,
+    required String token,
     String? from,
     String? to,
     String? category,
   }) async {
-    final q = <String>['user_id=$userId'];
+    final q = <String>[];
     if (from != null) q.add('from=$from');
     if (to != null) q.add('to=$to');
     if (category != null) q.add('category=${Uri.encodeComponent(category)}');
-    final uri = Uri.parse('$baseUrl/transactions?${q.join('&')}');
-    final response = await http.get(uri).timeout(_kTimeout, onTimeout: () {
+    final uri = Uri.parse('$baseUrl/transactions/?${q.join('&')}');
+    final response = await http.get(uri, headers: {
+      'Authorization': 'Bearer $token',
+    }).timeout(_kTimeout, onTimeout: () {
       throw TimeoutException(
           '서버에 연결할 수 없습니다. 주소($baseUrl)와 백엔드 실행 여부를 확인해 주세요.');
     });
@@ -36,11 +38,23 @@ class TransactionsApi {
         .toList();
   }
 
-  Future<Summary> getSummary(
-      {required String userId, required String month}) async {
-    final uri = Uri.parse(
-        '$baseUrl/summary?month=$month&user_id=${Uri.encodeComponent(userId)}');
-    final response = await http.get(uri).timeout(_kTimeout, onTimeout: () {
+  Future<Summary> getSummary({
+    required String token,
+    String? month,
+    String? fromDate,
+    String? toDate,
+  }) async {
+    final q = <String>[];
+    if (fromDate != null && toDate != null) {
+      q.add('from_date=$fromDate');
+      q.add('to_date=$toDate');
+    } else if (month != null) {
+      q.add('month=$month');
+    }
+    final uri = Uri.parse('$baseUrl/summary/?${q.join('&')}');
+    final response = await http.get(uri, headers: {
+      'Authorization': 'Bearer $token',
+    }).timeout(_kTimeout, onTimeout: () {
       throw TimeoutException(
           '서버에 연결할 수 없습니다. 주소($baseUrl)와 백엔드 실행 여부를 확인해 주세요.');
     });
@@ -102,11 +116,11 @@ class Transaction {
 
 class Summary {
   Summary({
-    required this.month,
+    required this.label,
     required this.total,
     required this.byCategory,
   });
-  final String month;
+  final String label;
   final int total;
   final Map<String, int> byCategory;
 
@@ -119,7 +133,7 @@ class Summary {
           : int.tryParse(e.value.toString()) ?? 0;
     }
     return Summary(
-      month: json['month'] as String? ?? '',
+      label: json['label'] as String? ?? json['month'] as String? ?? '',
       total: (json['total'] is int)
           ? json['total'] as int
           : int.tryParse(json['total'].toString()) ?? 0,

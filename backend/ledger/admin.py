@@ -1,5 +1,18 @@
-"""Django Admin 등록"""
-
 from django.contrib import admin
+from unfold.admin import ModelAdmin
 
-# Admin은 현재 사용하지 않음 (필요 시 등록)
+from .models import Transaction
+
+
+@admin.register(Transaction)
+class TransactionAdmin(ModelAdmin):
+    list_display = [
+        "occurred_date",
+        "type",
+        "amount",
+        "category",
+        "subcategory",
+        "memo",
+    ]
+    list_filter = ["type", "category", "occurred_date"]
+    search_fields = ["memo", "merchant", "category", "subcategory"]

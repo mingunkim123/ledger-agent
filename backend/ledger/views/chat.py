@@ -4,11 +4,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ledger.exceptions import LLMBadRequestError, LLMQuotaExceededError, LLMAuthError
 from ledger.serializers import ChatRequestSerializer
-from ledger.services.orchestrator import extract_transaction_sync
-from ledger.services.simple_parser import parse_simple_expense
-from ledger.services.transaction import TransactionService
 
 
 class ChatView(APIView):
@@ -24,109 +20,42 @@ class ChatView(APIView):
         idem_key = data.get("idem_key")
         llm_provider = data.get("llm_provider")
 
-        # ── 1) LLM 추출 ──
-        result = self._extract_with_fallback(user_id, message, llm_provider)
-        if isinstance(result, Response):
-            return result  # 에러 응답
-
-        # ── 2) 질문(clarify) 응답 ──
-        if result["action"] == "clarify":
-            return Response(
-                {
-                    "reply": result["reply"],
-                    "tx_id": None,
-                    "undo_token": None,
-                    "needs_clarification": True,
-                }
-            )
-
-        # ── 3) 거래 생성 ──
-        args = result["args"]
-        args.setdefault("source_text", message)
-
+        # ── 1) Agent Logic ──
         try:
-            tx_result = TransactionService.create_transaction(
-                user_id=args.get("user_id") or user_id,
-                args=args,
-                idem_key=idem_key,
-            )
-        except ValueError as e:
+            result = self._run_agent(user_id, message, llm_provider)
+        except Exception as e:
+            # 에러 로깅은 생략하고 502 리턴 (실무에선 로깅 필수)
             return Response(
-                {
-                    "reply": f"입력 형식을 확인해주세요. ({e})",
-                    "tx_id": None,
-                    "undo_token": None,
-                    "needs_clarification": True,
-                }
+                {"detail": f"Agent 오류: {str(e)}"},
+                status=status.HTTP_502_BAD_GATEWAY,
             )
 
-        if tx_result.get("cached"):
-            return Response(
-                {
-                    "reply": "이미 기록된 내역이에요.",
-                    "tx_id": tx_result["tx_id"],
-                    "undo_token": None,
-                    "needs_clarification": False,
-                }
-            )
+        # ── 2) Response 구성 ──
+        # Agent가 최종적으로 생성한 거래 중 첫 번째 것의 undo_token만 반환 (UI 제약)
+        # 여러 개 생성되어도 일단 하나만 취소 가능하게 하거나, UI 스펙에 따라 다름.
+        # 여기서는 가장 마지막 생성된 건의 토큰을 반환.
 
-        # 한 줄 확인 응답
-        tx = tx_result
-        type_label = "지출" if tx["type"] == "expense" else "수입"
-        reply = (
-            f"{tx['occurred_date']} {tx['category']}/{tx['subcategory']} "
-            f"{type_label} {tx['amount']:,}원 기록했어요."
-        )
+        created_txs = result.get("created_txs", [])
+        tx_id = None
+        undo_token = None
+
+        if created_txs:
+            last_tx = created_txs[-1]
+            tx_id = last_tx["tx_id"]
+            undo_token = last_tx["undo_token"]
 
         return Response(
             {
-                "reply": reply,
-                "tx_id": tx["tx_id"],
-                "undo_token": tx["undo_token"],
-                "needs_clarification": False,
+                "reply": result["reply"],
+                "tx_id": tx_id,
+                "undo_token": undo_token,
+                "needs_clarification": False,  # Agent가 알아서 질문함
             }
         )
 
     # ── Private ──
 
-    def _extract_with_fallback(self, user_id, message, llm_provider):
-        """LLM 추출 시도, 실패 시 에러 응답 또는 simple_parser 폴백."""
-        try:
-            return extract_transaction_sync(
-                user_id,
-                message,
-                provider_override=llm_provider,
-            )
-        except (LLMBadRequestError, LLMAuthError, LLMQuotaExceededError):
-            raise  # DRF Exception Handler가 처리
-        except Exception as e:
-            err_str = str(e).lower()
-            code = getattr(e, "code", None) or getattr(e, "status_code", None)
+    def _run_agent(self, user_id, message, llm_provider):
+        from ledger.services.orchestrator import run_agent_loop
 
-            if code == 400 or "400" in str(e) or "bad request" in err_str:
-                raise LLMBadRequestError()
-            if (
-                code == 429
-                or "429" in str(e)
-                or "rate" in err_str
-                or "quota" in err_str
-            ):
-                fallback = parse_simple_expense(message)
-                if fallback:
-                    fallback["user_id"] = user_id
-                    fallback["source_text"] = message
-                    return {"action": "create", "args": fallback}
-                raise LLMQuotaExceededError()
-            if (
-                code == 403
-                or "403" in str(e)
-                or "permission" in err_str
-                or "auth" in err_str
-            ):
-                raise LLMAuthError()
-
-            msg = getattr(e, "message", None) or str(e)
-            return Response(
-                {"detail": f"LLM 오류: {msg}"},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
+        return run_agent_loop(user_id, message, provider_override=llm_provider)

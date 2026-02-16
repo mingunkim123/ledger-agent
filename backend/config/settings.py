@@ -30,8 +30,16 @@ ALLOWED_HOSTS = ["*"]
 
 # ── 앱 ──
 INSTALLED_APPS = [
-    "django.contrib.contenttypes",
+    "unfold",
+    "unfold.contrib.filters",
+    "unfold.contrib.forms",
+    "unfold.contrib.inlines",
+    "django.contrib.admin",
     "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
     "rest_framework",
     "rest_framework_simplejwt",
     "accounts",
@@ -39,7 +47,13 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -56,6 +70,22 @@ _db_url = _raw_db_url.replace("postgresql+asyncpg://", "postgresql://")
 DATABASES = {
     "default": dj_database_url.parse(_db_url, engine="django.db.backends.postgresql"),
 }
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    },
+]
 
 # ── Django REST Framework ──
 REST_FRAMEWORK = {
@@ -134,3 +164,4 @@ USE_I18N = True
 USE_TZ = True
 
 APP_NAME = "가계부 에이전트"
+STATIC_URL = "static/"

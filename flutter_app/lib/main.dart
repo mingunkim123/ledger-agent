@@ -1,13 +1,27 @@
 /// 가계부 에이전트 - Flutter 앱
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+
+import 'package:provider/provider.dart';
 
 import 'config.dart';
 import 'screens/chat_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
 import 'screens/transaction_list_screen.dart';
+import 'services/auth_service.dart';
 
 void main() {
-  runApp(const ExpenseTrackerApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => AuthService(baseUrl: kApiBaseUrl)..loadToken(),
+        ),
+      ],
+      child: const ExpenseTrackerApp(),
+    ),
+  );
 }
 
 class ExpenseTrackerApp extends StatelessWidget {
@@ -18,6 +32,17 @@ class ExpenseTrackerApp extends StatelessWidget {
     return MaterialApp(
       title: '가계부',
       debugShowCheckedModeBanner: false,
+      // ── 한국어 로컬라이제이션 ──
+      locale: const Locale('ko', 'KR'),
+      supportedLocales: const [
+        Locale('ko', 'KR'),
+        Locale('en', 'US'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF2E7D6E),
@@ -33,16 +58,22 @@ class ExpenseTrackerApp extends StatelessWidget {
         ),
         cardTheme: CardThemeData(
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           color: Colors.white,
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
-      home: const MainShell(),
+      home: Consumer<AuthService>(
+        builder: (context, auth, _) {
+          return auth.isAuthenticated ? const MainShell() : const LoginScreen();
+        },
+      ),
     );
   }
 }
@@ -57,14 +88,12 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _index = 0;
 
-  static const _userId = 'user1';
-
   @override
   Widget build(BuildContext context) {
     final screens = [
-      HomeScreen(userId: _userId, baseUrl: kApiBaseUrl),
-      TransactionListScreen(userId: _userId, baseUrl: kApiBaseUrl),
-      ChatScreen(userId: _userId, baseUrl: kApiBaseUrl),
+      const HomeScreen(baseUrl: kApiBaseUrl),
+      const TransactionListScreen(baseUrl: kApiBaseUrl),
+      const ChatScreen(baseUrl: kApiBaseUrl),
     ];
     return Scaffold(
       body: IndexedStack(

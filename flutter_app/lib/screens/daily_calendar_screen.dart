@@ -2,19 +2,20 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:provider/provider.dart';
+
 import '../api/transactions_api.dart';
 import '../config.dart';
+import '../services/auth_service.dart';
 import '../widgets/category_style.dart';
 import 'transaction_list_screen.dart';
 
 class DailyCalendarScreen extends StatefulWidget {
   const DailyCalendarScreen({
     super.key,
-    this.userId = 'user1',
     this.baseUrl = kApiBaseUrl,
     this.initialMonth,
   });
-  final String userId;
   final String baseUrl;
   final String? initialMonth;
 
@@ -69,8 +70,12 @@ class _DailyCalendarScreenState extends State<DailyCalendarScreen> {
       final api = TransactionsApi(baseUrl: widget.baseUrl);
       final from = DateTime(_displayMonth.year, _displayMonth.month, 1);
       final to = DateTime(_displayMonth.year, _displayMonth.month + 1, 0);
+
+      final token = context.read<AuthService>().token;
+      if (token == null) return;
+
       final list = await api.getTransactions(
-        userId: widget.userId,
+        token: token,
         from: _ymd(from),
         to: _ymd(to),
       );
@@ -436,7 +441,6 @@ class _DailyCalendarScreenState extends State<DailyCalendarScreen> {
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => TransactionListScreen(
-                    userId: widget.userId,
                     baseUrl: widget.baseUrl,
                     fixedDate: _ymd(_selectedDate),
                   ),

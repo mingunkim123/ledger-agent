@@ -22,7 +22,8 @@ def _parse_amount(s: str) -> int | None:
     if m:
         return int(m.group(1)) * 1000
     # "5000원" 또는 "12000" 또는 "12,000"
-    m = re.search(r"(\d{1,3}(?:,\d{3})*|\d+)\s*원?", s)
+    # ((?:\d{1,3}(?:,\d{3})+)|(?:\d+)) -> 콤마 포함 또는 일반 숫자
+    m = re.search(r"((?:\d{1,3}(?:,\d{3})+)|(?:\d+))\s*원?", s)
     if m:
         return int(m.group(1).replace(",", ""))
     return None

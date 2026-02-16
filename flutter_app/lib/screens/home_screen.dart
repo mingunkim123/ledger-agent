@@ -1,9 +1,12 @@
-/// 홈 대시보드 - 이번 달 총 지출, 카테고리별, 최근 내역
+/// 홈 대시보드 - 기간별 총 지출, 카테고리별, 최근 내역
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:provider/provider.dart';
+
 import '../api/transactions_api.dart';
 import '../config.dart';
+import '../services/auth_service.dart';
 import '../widgets/category_style.dart';
 import 'daily_calendar_screen.dart';
 import 'transaction_list_screen.dart';
@@ -11,10 +14,8 @@ import 'transaction_list_screen.dart';
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
-    this.userId = 'user1',
     this.baseUrl = kApiBaseUrl,
   });
-  final String userId;
   final String baseUrl;
 
   @override
@@ -24,7 +25,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   Summary? _summary;
   List<Transaction> _recent = [];
+
+  // ── 기간 모드 ──
+  // true: 월(month) 기준,  false: 커스텀 기간(from~to)
+  bool _isMonthMode = true;
   String _month = '';
+  DateTimeRange? _customRange;
+
   var _loading = true;
   String? _error;
 
@@ -35,6 +42,28 @@ class _HomeScreenState extends State<HomeScreen> {
     _load();
   }
 
+  // ── 현재 기간의 from / to 날짜 계산 ──
+  String get _fromDate {
+    if (!_isMonthMode && _customRange != null) {
+      return DateFormat('yyyy-MM-dd').format(_customRange!.start);
+    }
+    return '$_month-01';
+  }
+
+  String get _toDate {
+    if (!_isMonthMode && _customRange != null) {
+      return DateFormat('yyyy-MM-dd').format(_customRange!.end);
+    }
+    final now = DateTime.now();
+    final isCurrentMonth = _month == DateFormat('yyyy-MM').format(now);
+    final endDay = isCurrentMonth
+        ? now.day
+        : DateTime(int.parse(_month.substring(0, 4)),
+                int.parse(_month.substring(5, 7)) + 1, 0)
+            .day;
+    return '$_month-${endDay.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -42,19 +71,30 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     try {
       final api = TransactionsApi(baseUrl: widget.baseUrl);
-      final summary =
-          await api.getSummary(userId: widget.userId, month: _month);
-      final now = DateTime.now();
-      final isCurrentMonth = _month == DateFormat('yyyy-MM').format(now);
-      final endDay = isCurrentMonth
-          ? now.day
-          : DateTime(int.parse(_month.substring(0, 4)),
-                  int.parse(_month.substring(5, 7)) + 1, 0)
-              .day;
-      final to = '$_month-${endDay.toString().padLeft(2, '0')}';
+
+      final token = context.read<AuthService>().token;
+      if (token == null) return;
+
+      // ── 요약 조회 ──
+      final Summary summary;
+      if (_isMonthMode) {
+        summary = await api.getSummary(token: token, month: _month);
+      } else {
+        summary = await api.getSummary(
+          token: token,
+          fromDate: _fromDate,
+          toDate: _toDate,
+        );
+      }
+
+      // ── 거래 내역 조회 ──
       final list = await api.getTransactions(
-          userId: widget.userId, from: '$_month-01', to: to);
+        token: token,
+        from: _fromDate,
+        to: _toDate,
+      );
       final expenseList = list.where((tx) => tx.type == 'expense').toList();
+
       setState(() {
         _summary = summary;
         _recent = expenseList.take(10).toList();
@@ -68,7 +108,67 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // ── 월 이동 ──
+  void _changeMonth(int delta) {
+    final year = int.parse(_month.substring(0, 4));
+    final m = int.parse(_month.substring(5, 7));
+    final d = DateTime(year, m + delta, 1);
+    setState(() {
+      _month = DateFormat('yyyy-MM').format(d);
+      _isMonthMode = true;
+      _customRange = null;
+    });
+    _load();
+  }
+
+  // ── 커스텀 기간 선택 ──
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final initial = _customRange ??
+        DateTimeRange(
+          start: DateTime(now.year, now.month, 1),
+          end: now,
+        );
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 1, 12, 31),
+      initialDateRange: initial,
+      locale: const Locale('ko', 'KR'),
+      helpText: '기간 선택',
+      saveText: '적용',
+      cancelText: '취소',
+    );
+    if (picked != null) {
+      setState(() {
+        _customRange = picked;
+        _isMonthMode = false;
+      });
+      _load();
+    }
+  }
+
+  // ── 월 모드로 복귀 ──
+  void _resetToMonth() {
+    setState(() {
+      _isMonthMode = true;
+      _customRange = null;
+      _month = DateFormat('yyyy-MM').format(DateTime.now());
+    });
+    _load();
+  }
+
   static final _currencyFormat = NumberFormat('#,###', 'ko_KR');
+  static final _dateDisplayFmt = DateFormat('M월 d일');
+
+  String get _periodLabel {
+    if (!_isMonthMode && _customRange != null) {
+      return '${_dateDisplayFmt.format(_customRange!.start)} ~ ${_dateDisplayFmt.format(_customRange!.end)}';
+    }
+    return _month.length >= 7
+        ? '${_month.substring(0, 4)}년 ${_month.substring(5)}월'
+        : _month;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +193,34 @@ class _HomeScreenState extends State<HomeScreen> {
         scrolledUnderElevation: 2,
         backgroundColor: theme.colorScheme.surface,
         foregroundColor: theme.colorScheme.onSurface,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: '로그아웃',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('로그아웃'),
+                  content: const Text('정말 로그아웃 하시겠습니까?'),
+                  actions: [
+                    TextButton(
+                      child: const Text('취소'),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                    TextButton(
+                      child: const Text('로그아웃'),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        context.read<AuthService>().logout();
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: _load,
@@ -135,7 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: _buildMonthCard(theme),
+                child: _buildPeriodCard(theme),
               ),
             ),
             SliverToBoxAdapter(
@@ -187,8 +315,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     TextButton(
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => TransactionListScreen(
-                              userId: widget.userId, baseUrl: widget.baseUrl),
+                          builder: (_) =>
+                              TransactionListScreen(baseUrl: widget.baseUrl),
                         ),
                       ),
                       child: const Text('전체보기'),
@@ -245,11 +373,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMonthCard(ThemeData theme) {
+  /// ── 기간 표시 카드 (월 / 커스텀) ──
+  Widget _buildPeriodCard(ThemeData theme) {
     final total = _summary?.total ?? 0;
-    final monthLabel = _month.length >= 7
-        ? '${_month.substring(0, 4)}년 ${_month.substring(5)}월'
-        : _month;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
       decoration: BoxDecoration(
@@ -273,10 +399,98 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(monthLabel,
-              style: theme.textTheme.titleMedium?.copyWith(
-                  color:
-                      theme.colorScheme.onPrimaryContainer.withOpacity(0.9))),
+          // ── 기간 라벨 + 이동/선택 버튼 ──
+          Row(
+            children: [
+              // 월 모드일 때 좌우 이동
+              if (_isMonthMode) ...[
+                InkWell(
+                  onTap: () => _changeMonth(-1),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.chevron_left,
+                        size: 22, color: theme.colorScheme.onPrimaryContainer),
+                  ),
+                ),
+              ],
+              Expanded(
+                child: Text(
+                  _periodLabel,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color:
+                        theme.colorScheme.onPrimaryContainer.withOpacity(0.9),
+                  ),
+                  textAlign: _isMonthMode ? TextAlign.center : TextAlign.left,
+                ),
+              ),
+              if (_isMonthMode) ...[
+                InkWell(
+                  onTap: () => _changeMonth(1),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.chevron_right,
+                        size: 22, color: theme.colorScheme.onPrimaryContainer),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 4),
+              // 기간 선택 버튼
+              InkWell(
+                onTap: _pickDateRange,
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color:
+                        theme.colorScheme.onPrimaryContainer.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.date_range,
+                          size: 16,
+                          color: theme.colorScheme.onPrimaryContainer),
+                      const SizedBox(width: 4),
+                      Text(
+                        '기간 선택',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // 커스텀 모드일 때 "이번 달로 돌아가기" 버튼
+          if (!_isMonthMode) ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerRight,
+              child: InkWell(
+                onTap: _resetToMonth,
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text(
+                    '이번 달로 돌아가기',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color:
+                          theme.colorScheme.onPrimaryContainer.withOpacity(0.7),
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Text(
             '${_currencyFormat.format(total)}원',
@@ -286,7 +500,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          Text('이번 달 지출',
+          Text(_isMonthMode ? '이번 달 지출' : '선택 기간 지출',
               style: theme.textTheme.bodySmall?.copyWith(
                   color:
                       theme.colorScheme.onPrimaryContainer.withOpacity(0.8))),
@@ -303,7 +517,7 @@ class _HomeScreenState extends State<HomeScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: const Padding(
           padding: EdgeInsets.all(24),
-          child: Center(child: Text('이번 달 카테고리별 지출이 없습니다.')),
+          child: Center(child: Text('이 기간 카테고리별 지출이 없습니다.')),
         ),
       );
     }
@@ -370,7 +584,6 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => DailyCalendarScreen(
-          userId: widget.userId,
           baseUrl: widget.baseUrl,
           initialMonth: _month,
         ),
