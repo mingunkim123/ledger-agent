@@ -3,6 +3,7 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 
 from ledger.serializers import (
     CreateTransactionSerializer,
@@ -11,10 +12,13 @@ from ledger.serializers import (
 )
 from ledger.services.transaction_command import TransactionCommandService
 from ledger.services.transaction_query import TransactionQueryService
+from ledger.permissions import IsOwner
 
 
 class TransactionListCreateView(APIView):
     """POST /transactions/ — 거래 생성, GET /transactions/ — 거래 조회"""
+
+    permission_classes = [IsAuthenticated, IsOwner]
 
     def post(self, request):
         """거래 생성"""
