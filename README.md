@@ -1,85 +1,218 @@
-# 가계부 에이전트 (Expense Tracker Agent)
+# Expense Tracker Agent
 
-> **핵심 원칙**: LLM은 "추출/판단"만, 서버는 "정규화/검증/저장"의 최종 책인자
+Django/DRF 백엔드와 Flutter 앱으로 구성된 가계부 시스템입니다.  
+자연어 입력(`chat`)과 폼 입력(`transactions`)을 모두 지원하며, 실무에서 필요한 인증/멱등성/Undo/감사로그를 포함합니다.
 
----
+## 핵심 기능
 
-## 1. 프로젝트 목표
+- JWT 기반 인증 (`register`, `login`, `refresh`)
+- 거래 생성/조회/요약 API
+- 자연어 입력 기반 거래 처리 (`/api/v1/chat/`)
+- 멱등성 키(`idem_key`)로 중복 저장 방지
+- Redis TTL 기반 Undo 토큰 지원
+- 감사로그(`audit_logs`) 저장
+- OpenAPI 스키마 및 Swagger/ReDoc 제공
+- API 버저닝 (`/api/v1`, `/api/v2`)
 
-### 사용자 경험
-- **한 줄 입력** → 날짜/금액/항목/카테고리/지출·수입 자동 추출 → DB 즉시 반영 → 한 줄 확인 응답
-- 애매하면 **딱 1개 질문**만으로 확인 후 기록
+## 기술 스택
 
-### 시스템 목표
-| 목표 | 설명 |
-|------|------|
-| 정확성 | 날짜/금액/지출·수입 실수 최소화 |
-| 중복 방지 | 네트워크 재시도에도 1건만 저장 (idempotency) |
-| 되돌리기 | 자동 저장 후 "Undo" 지원 |
-| 감사로그 | 저장/수정/삭제 기록 유지 |
+- Backend: Django, Django REST Framework, SimpleJWT
+- DB: PostgreSQL
+- Cache: Redis
+- LLM: Ollama / Gemini / Groq / Grok (선택)
+- Frontend: Flutter
+- Test: pytest, pytest-django
 
----
+## 저장소 구조
 
-## 2. 구현 단계 (Step-by-Step)
-
-| 단계 | 내용 | 산출물 |
-|------|------|--------|
-| **Step 1** | 프로젝트 구조 & README | ✅ 이 문서 |
-| **Step 2** | DB 스키마 (MVP 테이블) | ✅ `schema.sql` |
-| **Step 3-1** | FastAPI 최소 골격 (requirements + main.py) | ✅ `backend/` |
-| **Step 3-2** | 라우터 구조 (4개 엔드포인트 플레이스홀더) | ✅ `routers/` |
-| **Step 3-3** | Config + Auth 플레이스홀더 | ✅ `config.py`, `auth.py` |
-| **Step 4-1** | DB 연결 설정 | ✅ `database.py`, `/health/db` |
-| **Step 4-2** | Idempotency 서비스 (get_cached, save) | ✅ `services/idempotency.py` |
-| **Step 4-3** | POST /transactions에 idempotency 적용 | ✅ `routers/transactions.py` |
-| **Step 5-1** | 정규화 헬퍼 (날짜/금액/카테고리) | ✅ `services/normalizer.py` |
-| **Step 5-2** | POST /transactions에 정규화 적용 | ✅ `routers/transactions.py` |
-| **Step 5-3** | GET /transactions 리스트 조회 | ✅ `routers/transactions.py` |
-| **Step 6-1** | Redis 연결 설정 | ✅ `redis_client.py` |
-| **Step 6-2** | Undo 토큰 저장 (POST /transactions 응답에 undo_token) | ✅ `services/undo.py` |
-| **Step 6-3** | POST /undo 구현 | ✅ `routers/undo.py` |
-| **Step 7-1** | 감사로그 서비스 (log_audit 헬퍼) | ✅ `services/audit.py` |
-| **Step 7-2** | POST /transactions에 create 감사로그 적용 | ✅ `routers/transactions.py` |
-| **Step 7-3** | POST /undo에 undo 감사로그 적용 | ✅ `routers/undo.py` |
-| **Step 8-1** | LLM 연결 설정 (OpenAI SDK, config) | `llm_client.py` |
-| **Step 8-2** | Tool 스키마 + 추출 로직 (create_transaction 도구) | ✅ `services/orchestrator.py` |
-| **Step 8-3** | POST /chat Orchestrator 완성 | ✅ `routers/chat.py` |
-| **Step 9** | Flutter 앱 기본 UI | ✅ `flutter_app/` |
-
----
-
-## 3. 아키텍처 개요
-
-```
-[Flutter App] → [REST API] → [Auth] → [Orchestrator] → [LLM]
-                                    ↓
-                              [Normalizer] → [Idempotency] → [Tool Executor]
-                                    ↓                              ↓
-                              [PostgreSQL] ←───────────────────────┘
-                              [Redis - Undo TTL]
+```text
+.
+├── backend/          # Django API 서버
+├── flutter_app/      # Flutter 클라이언트
+├── docs/             # 다이어그램/문서 자산
+├── schema.sql        # DB 스키마 참고
+└── README.md
 ```
 
----
+## 빠른 시작 (Backend)
 
-## 4. MVP API 엔드포인트
+### 1) 사전 준비
 
-| 메서드 | 경로 | 용도 |
-|--------|------|------|
-| POST | `/chat` | 자연어 입력 → 추출 → 저장 → 응답 |
-| POST | `/transactions` | 명시적 폼 입력 |
-| POST | `/undo` | 마지막 저장 취소 |
-| GET | `/summary?month=YYYY-MM` | 월별 요약 |
-| GET | `/transactions` | 리스트 조회 |
+- Python 3.10+
+- PostgreSQL
+- Redis
 
----
+### 2) 설치
 
-## 5. 설계 규칙 (서버 최종 책임)
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
 
-- **날짜**: 연도 없으면 "가장 최근 해당 날짜" (오늘 2026-02-01 → "1/31" = 2026-01-31)
-- **금액**: "2.3만", "23,000원" → KRW 정수
-- **지출/수입**: "구매/결제" → expense, "입금/월급" → income, 애매하면 질문 1개
-- **카테고리**: 초기 고정 세트 → 이후 사용자 규칙(merchant→category) 학습
+### 3) 환경변수 설정 (`backend/.env`)
 
----
+필수/주요 항목:
 
-*Step 9 완료. MVP 백엔드 + Flutter 앱 구성 완료.*
+| 변수 | 설명 | 예시 |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL 연결 문자열 | `postgresql://myuser:password@localhost:5432/expense_db` |
+| `REDIS_URL` | Redis 연결 문자열 | `redis://localhost:6379/0` |
+| `LLM_PROVIDER` | `ollama` \| `gemini` \| `groq` \| `grok` | `groq` |
+| `GROQ_API_KEY` | `LLM_PROVIDER=groq`일 때 필요 | `...` |
+
+선택 항목:
+
+- `SECRET_KEY` (운영 환경에서는 반드시 설정)
+- `DEBUG` (`True/False`, 기본값 `False`)
+- `UNDO_TTL_SECONDS` (기본값 `300`)
+- `OLLAMA_BASE_URL`, `OLLAMA_MODEL`
+- `GEMINI_API_KEY`, `GEMINI_MODEL`
+- `GROQ_MODEL`
+- `GROK_API_KEY`, `GROK_MODEL`
+
+참고: `DATABASE_URL`은 `postgresql+asyncpg://...` 형식도 내부에서 자동 변환해 사용합니다.
+
+### 4) 마이그레이션 및 실행
+
+```bash
+cd backend
+source venv/bin/activate
+python manage.py migrate
+./run.sh
+```
+
+기본 실행 주소: `http://localhost:8001`
+
+### 5) 헬스체크
+
+```bash
+curl http://localhost:8001/health/
+curl http://localhost:8001/health/db/
+```
+
+## API 개요
+
+### 공개 엔드포인트 (인증 불필요)
+
+- `GET /`
+- `GET /health/`
+- `GET /health/db/`
+- `GET /api/schema/`
+- `GET /api/schema/swagger-ui/`
+- `GET /api/schema/redoc/`
+- `POST /api/v1/accounts/register/`
+- `POST /api/v1/accounts/login/`
+- `POST /api/v1/accounts/token/refresh/`
+
+### 인증 필요 엔드포인트 (Bearer JWT)
+
+- `POST /api/v1/chat/`
+- `GET, POST /api/v1/transactions/`
+- `POST /api/v1/undo/`
+- `GET /api/v1/summary/`
+
+버저닝:
+
+- `v2`는 현재 `v1`과 동일 라우팅으로 동작 (`/api/v2/...`)
+
+## API 사용 예시
+
+### 1) 회원가입
+
+```bash
+curl -X POST http://localhost:8001/api/v1/accounts/register/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "demo",
+    "password": "demo12345!",
+    "password2": "demo12345!"
+  }'
+```
+
+### 2) 로그인 (access 토큰 발급)
+
+```bash
+curl -X POST http://localhost:8001/api/v1/accounts/login/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "demo",
+    "password": "demo12345!"
+  }'
+```
+
+### 3) 거래 생성
+
+```bash
+curl -X POST http://localhost:8001/api/v1/transactions/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -d '{
+    "occurred_date": "2026-02-13",
+    "type": "expense",
+    "amount": "12000",
+    "category": "식비",
+    "idem_key": "demo-001"
+  }'
+```
+
+### 4) 자연어 거래 입력
+
+```bash
+curl -X POST http://localhost:8001/api/v1/chat/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -d '{
+    "message": "오늘 점심 12000원 썼어",
+    "llm_provider": "groq"
+  }'
+```
+
+### 5) 월별 요약
+
+```bash
+curl "http://localhost:8001/api/v1/summary/?month=2026-02" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+## 테스트
+
+```bash
+cd backend
+./run_tests.sh -v
+```
+
+주요 포인트:
+
+- 테스트 설정은 `config.test_settings`(SQLite in-memory) 사용
+- 인증/권한, API 버저닝, 스키마 엔드포인트, 서비스 계층 테스트 포함
+
+## Flutter 앱 실행
+
+```bash
+cd flutter_app
+flutter pub get
+flutter run
+```
+
+실행 전 `flutter_app/lib/config.dart`의 `kApiBaseUrl`을 환경에 맞게 수정하세요.
+
+- 로컬 PC에서 앱 실행: `http://localhost:8001/api/v1`
+- Android 에뮬레이터: `http://10.0.2.2:8001/api/v1`
+- 실기기: `http://<PC_IP>:8001/api/v1`
+
+## 운영 체크리스트
+
+- `DEBUG=False`
+- 안전한 `SECRET_KEY` 설정
+- `ALLOWED_HOSTS` 제한
+- PostgreSQL/Redis 가용성 모니터링
+- LLM API 키를 환경변수/시크릿 매니저로 관리
+
+## 참고 문서
+
+- `docs/folder_structure.png`
+- `docs/data_flow.png`
+- `docs/file_responsibilities.png`
