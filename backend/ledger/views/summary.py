@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ledger.serializers import SummaryQuerySerializer
-from ledger.services.transaction import TransactionService
+from ledger.services.transaction_query import TransactionQueryService
 
 
 class SummaryView(APIView):
@@ -17,7 +17,7 @@ class SummaryView(APIView):
 
         user_id = str(request.user.id)  # ← JWT 토큰에서 추출
 
-        result = TransactionService.get_summary(
+        result = TransactionQueryService.get_summary(
             user_id=user_id,
             month=params.get("month"),
             from_date=params.get("from_date"),

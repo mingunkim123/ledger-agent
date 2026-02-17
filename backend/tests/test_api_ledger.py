@@ -68,9 +68,9 @@ class TestTransactionCreateAPI:
 
     URL = "/api/v1/transactions/"
 
-    @patch("ledger.services.transaction.save_undo_token")
-    @patch("ledger.services.transaction.log_audit")
-    @patch("ledger.services.transaction.get_cached_tx_id", return_value=None)
+    @patch("ledger.services.transaction_command.save_undo_token")
+    @patch("ledger.services.transaction_command.log_audit")
+    @patch("ledger.services.transaction_command.get_cached_tx_id", return_value=None)
     def test_정상_거래_생성(self, mock_cache, mock_audit, mock_undo, api_client):
         response = api_client.post(
             self.URL,

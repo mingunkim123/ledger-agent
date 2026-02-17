@@ -1,11 +1,9 @@
-"""TransactionService — 거래 생성/조회/취소/요약 비즈니스 로직 통합"""
+"""TransactionCommandService — 거래 생성, 취소, 삭제 (Write)"""
 
-import calendar
 import uuid
 from datetime import date
 
 from django.db import transaction
-from django.db.models import Sum
 
 from ledger.exceptions import TransactionNotFoundError, UndoTokenExpiredError
 from ledger.models import Transaction
@@ -23,12 +21,10 @@ from ledger.services.undo import (
 )
 
 
-class TransactionService:
+class TransactionCommandService:
     """
-    거래 관련 비즈니스 로직 통합.
-
-    ChatView와 TransactionListCreateView에서 중복되던 로직을
-    단일 서비스 계층으로 통합하여 DRY 원칙을 준수합니다.
+    거래 상태 변경(Write)을 담당하는 서비스.
+    CQRS 패턴의 Command 역할.
     """
 
     @staticmethod
@@ -38,19 +34,7 @@ class TransactionService:
         idem_key: str | None = None,
     ) -> dict:
         """
-        거래 생성 파이프라인:
-        1. 멱등성(idempotency) 캐시 확인
-        2. 날짜/금액/카테고리 정규화
-        3. 유효성 검증
-        4. Transaction 레코드 생성
-        5. 멱등성 키 저장
-        6. 감사로그 기록
-        7. undo 토큰 발급
-
-        Returns:
-            dict with tx_id, undo_token, cached 등
-        Raises:
-            ValueError: 금액/날짜 입력 형식 오류
+        거래 생성 (Atomic).
         """
         # ── 1) 멱등성 캐시 확인 ──
         if idem_key:
@@ -108,7 +92,7 @@ class TransactionService:
                 if idem_key:
                     save_idempotency(user_id, idem_key, tx.tx_id)
 
-                # ── 6) 감사로그 ──
+                # 6) 감사로그
                 after_snapshot = {
                     "tx_id": str(tx.tx_id),
                     "user_id": user_id,
@@ -127,7 +111,6 @@ class TransactionService:
                 )
 
                 # 7) undo 토큰
-                # Redis 작업은 DB 트랜잭션과 무관하지만, 에러 발생 시 DB 롤백을 유도하기 위해 블록 내에 배치
                 undo_token = str(uuid.uuid4())
                 save_undo_token(undo_token, tx.tx_id)
         except Exception as e:
@@ -145,39 +128,9 @@ class TransactionService:
         }
 
     @staticmethod
-    def list_transactions(
-        user_id: str,
-        from_date=None,
-        to_date=None,
-        category: str | None = None,
-    ):
-        """
-        거래 목록 조회 (필터링 적용).
-        Returns: QuerySet[Transaction]
-        """
-        qs = Transaction.objects.filter(user_id=user_id)
-        if from_date:
-            qs = qs.filter(occurred_date__gte=from_date)
-        if to_date:
-            qs = qs.filter(occurred_date__lte=to_date)
-        if category:
-            qs = qs.filter(category=category)
-        return qs.order_by("-occurred_date", "-created_at")
-
-    @staticmethod
     def undo_transaction(undo_token: str) -> dict:
         """
-        거래 취소 파이프라인:
-        1. Redis에서 undo_token → tx_id 조회
-        2. Transaction 조회
-        3. 감사로그 기록
-        4. Transaction 삭제
-        5. Redis 토큰 삭제
-
-        Returns:
-            dict with success, tx_id, message
-        Raises:
-            UndoTokenExpiredError, TransactionNotFoundError
+        거래 취소 (Atomic).
         """
         # ── 1) Redis 조회 ──
         tx_id = get_tx_id_from_undo_token(undo_token)
@@ -213,7 +166,7 @@ class TransactionService:
             # 4) 삭제
             tx.delete()
 
-            # 5) Redis 토큰 삭제 (DB 롤백 시 이 부분도 실행 취소되는 것은 아니지만, 마지막 단계라 안전)
+            # 5) Redis 토큰 삭제
             delete_undo_token(undo_token)
 
         return {
@@ -221,56 +174,6 @@ class TransactionService:
             "tx_id": str(tx_id),
             "message": "저장이 취소되었습니다.",
         }
-
-    @staticmethod
-    def get_summary(
-        user_id: str,
-        month: str | None = None,
-        from_date=None,
-        to_date=None,
-    ) -> dict:
-        """
-        기간별 카테고리별 지출 합계.
-
-        Args:
-            user_id: 사용자 ID
-            month: "YYYY-MM" 형식 (옵션)
-            from_date: 시작일 (옵션, date 객체)
-            to_date: 종료일 (옵션, date 객체)
-
-        month 또는 from_date/to_date 쌍 중 하나가 필요합니다.
-        from_date/to_date가 있으면 month보다 우선합니다.
-
-        Returns:
-            dict with label, total, by_category
-        """
-        if from_date and to_date:
-            label = f"{from_date} ~ {to_date}"
-        elif month:
-            year, m = int(month[:4]), int(month[5:7])
-            from_date = date(year, m, 1)
-            last_day = calendar.monthrange(year, m)[1]
-            to_date = date(year, m, last_day)
-            label = month
-        else:
-            raise ValueError("month 또는 from_date/to_date 필수")
-
-        qs = (
-            Transaction.objects.filter(
-                user_id=user_id,
-                type="expense",
-                occurred_date__gte=from_date,
-                occurred_date__lte=to_date,
-            )
-            .values("category")
-            .annotate(cat_total=Sum("amount"))
-            .order_by("-cat_total")
-        )
-
-        by_category = {row["category"]: row["cat_total"] for row in qs}
-        total = sum(by_category.values())
-
-        return {"label": label, "total": total, "by_category": by_category}
 
     @staticmethod
     def delete_transaction_by_query(
@@ -281,10 +184,7 @@ class TransactionService:
         merchant: str | None = None,
     ) -> dict:
         """
-        조건에 맞는 가장 최근 거래 삭제 (자연어 삭제용).
-        1. 날짜, 금액 필수
-        2. 카테고리/가맹점은 선택 (없으면 금액/날짜만으로 검색)
-        3. 여러 개면 가장 최근 생성된 것 삭제
+        조건부 삭제 (Atomic).
         """
         qs = Transaction.objects.filter(
             user_id=user_id,
@@ -293,13 +193,11 @@ class TransactionService:
         if occurred_date:
             qs = qs.filter(occurred_date=occurred_date)
 
-        # 카테고리나 가맹점이 있으면 필터 추가
         if category and category != "기타":
             qs = qs.filter(category=category)
         if merchant:
             qs = qs.filter(merchant__icontains=merchant)
 
-        # 가장 최근 것 1개 조회
         target = qs.order_by("-created_at").first()
         if not target:
             return {
@@ -307,7 +205,6 @@ class TransactionService:
                 "message": "일치하는 거래 내역을 찾을 수 없습니다.",
             }
 
-        # 삭제 프로세스 (audit logging 포함) - Atomic
         with transaction.atomic():
             before_snapshot = {
                 "tx_id": str(target.tx_id),
@@ -332,64 +229,9 @@ class TransactionService:
         }
 
     @staticmethod
-    def search_transactions(
-        user_id: str,
-        keyword: str | None = None,
-        start_date: date | None = None,
-        end_date: date | None = None,
-        min_amount: int | None = None,
-        max_amount: int | None = None,
-        category: str | None = None,
-    ) -> list[dict]:
-        """
-        LLM용 거래 검색.
-        Returns:
-            list[dict]: 검색된 거래 내역 (최대 20개)
-        """
-        qs = Transaction.objects.filter(user_id=user_id)
-
-        if start_date:
-            qs = qs.filter(occurred_date__gte=start_date)
-        if end_date:
-            qs = qs.filter(occurred_date__lte=end_date)
-        if min_amount is not None:
-            qs = qs.filter(amount__gte=min_amount)
-        if max_amount is not None:
-            qs = qs.filter(amount__lte=max_amount)
-        if category and category != "기타":
-            qs = qs.filter(category=category)
-
-        if keyword:
-            # merchant, category, subcategory, memo, source_text 에서 검색
-            from django.db.models import Q
-
-            qs = qs.filter(
-                Q(merchant__icontains=keyword)
-                | Q(category__icontains=keyword)
-                | Q(subcategory__icontains=keyword)
-                | Q(memo__icontains=keyword)
-                | Q(source_text__icontains=keyword)
-            )
-
-        # 최신순, 최대 10개만 반환 (LLM 컨텍스트 절약)
-        results = []
-        for tx in qs.order_by("-occurred_date", "-created_at")[:10]:
-            results.append(
-                {
-                    "tx_id": str(tx.tx_id),
-                    "date": str(tx.occurred_date),
-                    "amount": tx.amount,
-                    "category": tx.category,
-                    "merchant": tx.merchant or "",
-                    "memo": tx.memo or "",
-                }
-            )
-        return results
-
-    @staticmethod
     def delete_transactions_by_ids(user_id: str, tx_ids: list[str]) -> dict:
         """
-        ID 목록으로 거래 일괄 삭제.
+        ID 일괄 삭제 (Atomic).
         """
         targets = Transaction.objects.filter(user_id=user_id, tx_id__in=tx_ids)
         if not targets.exists():
@@ -400,7 +242,6 @@ class TransactionService:
 
         with transaction.atomic():
             for target in targets:
-                # Audit Log
                 before_snapshot = {
                     "tx_id": str(target.tx_id),
                     "user_id": target.user_id,

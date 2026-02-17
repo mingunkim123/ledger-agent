@@ -4,7 +4,8 @@ import json
 from datetime import date
 
 from ledger.services.llm_client import chat_completion
-from ledger.services.transaction import TransactionService
+from ledger.services.transaction_command import TransactionCommandService
+from ledger.services.transaction_query import TransactionQueryService
 
 # ── 도구 정의 ──
 
@@ -243,7 +244,7 @@ def _execute_tool(user_id: str, name: str, args: dict, created_txs_acc: list) ->
         # TransactionService.create_transaction 호출
         # args에 user_id 주입 필요? 서비스 메서드는 user_id 별도 인자
         try:
-            res = TransactionService.create_transaction(user_id, args)
+            res = TransactionCommandService.create_transaction(user_id, args)
             created_txs_acc.append(
                 {"tx_id": res["tx_id"], "undo_token": res["undo_token"]}
             )
@@ -253,7 +254,7 @@ def _execute_tool(user_id: str, name: str, args: dict, created_txs_acc: list) ->
 
     elif name == "search_transactions":
         # 인자 매핑
-        return TransactionService.search_transactions(
+        return TransactionQueryService.search_transactions(
             user_id=user_id,
             keyword=args.get("keyword"),
             start_date=args.get("start_date"),
@@ -279,6 +280,6 @@ def _execute_tool(user_id: str, name: str, args: dict, created_txs_acc: list) ->
                     inner = inner[1:-1]
                 tx_ids = [x.strip().strip("'\"") for x in inner.split(",") if x.strip()]
 
-        return TransactionService.delete_transactions_by_ids(user_id, tx_ids)
+        return TransactionCommandService.delete_transactions_by_ids(user_id, tx_ids)
 
     return {"status": "error", "message": "Unknown tool"}

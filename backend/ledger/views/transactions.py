@@ -9,7 +9,8 @@ from ledger.serializers import (
     TransactionListQuerySerializer,
     TransactionResponseSerializer,
 )
-from ledger.services.transaction import TransactionService
+from ledger.services.transaction_command import TransactionCommandService
+from ledger.services.transaction_query import TransactionQueryService
 
 
 class TransactionListCreateView(APIView):
@@ -24,7 +25,7 @@ class TransactionListCreateView(APIView):
         user_id = str(request.user.id)  # ← JWT 토큰에서 추출
 
         try:
-            result = TransactionService.create_transaction(
+            result = TransactionCommandService.create_transaction(
                 user_id=user_id,
                 args=data,
                 idem_key=data.get("idem_key"),
@@ -53,7 +54,7 @@ class TransactionListCreateView(APIView):
 
         user_id = str(request.user.id)  # ← JWT 토큰에서 추출
 
-        transactions = TransactionService.list_transactions(
+        transactions = TransactionQueryService.list_transactions(
             user_id=user_id,
             from_date=params.get("from_date"),
             to_date=params.get("to_date"),

@@ -18,7 +18,8 @@ from unittest.mock import patch
 import pytest
 
 from ledger.models import Transaction
-from ledger.services.transaction import TransactionService
+from ledger.services.transaction_command import TransactionCommandService
+from ledger.services.transaction_query import TransactionQueryService
 
 
 @pytest.mark.django_db
@@ -26,12 +27,12 @@ class TestCreateTransaction:
     """TransactionService.create_transaction() 테스트."""
 
     # Redis 호출을 Mock으로 대체 — 실제 Redis 없이 테스트 가능
-    @patch("ledger.services.transaction.save_undo_token")
-    @patch("ledger.services.transaction.log_audit")
-    @patch("ledger.services.transaction.get_cached_tx_id", return_value=None)
+    @patch("ledger.services.transaction_command.save_undo_token")
+    @patch("ledger.services.transaction_command.log_audit")
+    @patch("ledger.services.transaction_command.get_cached_tx_id", return_value=None)
     def test_정상_거래_생성(self, mock_cache, mock_audit, mock_undo, user):
         """거래가 DB에 저장되고 올바른 결과가 반환되는지 확인."""
-        result = TransactionService.create_transaction(
+        result = TransactionCommandService.create_transaction(
             user_id=str(user.id),
             args={
                 "occurred_date": "2026-02-13",
@@ -54,13 +55,13 @@ class TestCreateTransaction:
         assert tx.amount == 8000
         assert tx.user_id == str(user.id)
 
-    @patch("ledger.services.transaction.save_undo_token")
-    @patch("ledger.services.transaction.log_audit")
-    @patch("ledger.services.transaction.get_cached_tx_id", return_value=None)
+    @patch("ledger.services.transaction_command.save_undo_token")
+    @patch("ledger.services.transaction_command.log_audit")
+    @patch("ledger.services.transaction_command.get_cached_tx_id", return_value=None)
     def test_금액_0이하면_에러(self, mock_cache, mock_audit, mock_undo, user):
         """금액이 0이하면 ValueError가 발생해야 합니다."""
         with pytest.raises(ValueError, match="금액은 0보다 커야 합니다"):
-            TransactionService.create_transaction(
+            TransactionCommandService.create_transaction(
                 user_id=str(user.id),
                 args={
                     "occurred_date": "2026-02-13",
@@ -70,14 +71,15 @@ class TestCreateTransaction:
                 },
             )
 
-    @patch("ledger.services.transaction.save_undo_token")
-    @patch("ledger.services.transaction.log_audit")
+    @patch("ledger.services.transaction_command.save_undo_token")
+    @patch("ledger.services.transaction_command.log_audit")
     @patch(
-        "ledger.services.transaction.get_cached_tx_id", return_value="existing-tx-id"
+        "ledger.services.transaction_command.get_cached_tx_id",
+        return_value="existing-tx-id",
     )
     def test_멱등성_캐시_히트(self, mock_cache, mock_audit, mock_undo, user):
         """같은 idem_key로 두 번 호출하면 캐시된 결과를 반환."""
-        result = TransactionService.create_transaction(
+        result = TransactionCommandService.create_transaction(
             user_id=str(user.id),
             args={
                 "occurred_date": "2026-02-13",
@@ -91,12 +93,12 @@ class TestCreateTransaction:
         assert result["cached"] is True
         assert result["tx_id"] == "existing-tx-id"
 
-    @patch("ledger.services.transaction.save_undo_token")
-    @patch("ledger.services.transaction.log_audit")
-    @patch("ledger.services.transaction.get_cached_tx_id", return_value=None)
+    @patch("ledger.services.transaction_command.save_undo_token")
+    @patch("ledger.services.transaction_command.log_audit")
+    @patch("ledger.services.transaction_command.get_cached_tx_id", return_value=None)
     def test_만원_단위_금액_정규화(self, mock_cache, mock_audit, mock_undo, user):
         """'2.3만' 같은 입력이 23000으로 변환되는지 E2E 확인."""
-        result = TransactionService.create_transaction(
+        result = TransactionCommandService.create_transaction(
             user_id=str(user.id),
             args={
                 "occurred_date": "2026-02-13",
@@ -111,22 +113,22 @@ class TestCreateTransaction:
 
 @pytest.mark.django_db
 class TestListTransactions:
-    """TransactionService.list_transactions() 테스트."""
+    """TransactionQueryService.list_transactions() 테스트."""
 
     def test_빈_목록(self, user):
         """거래가 없으면 빈 QuerySet 반환."""
-        result = TransactionService.list_transactions(user_id=str(user.id))
+        result = TransactionQueryService.list_transactions(user_id=str(user.id))
         assert result.count() == 0
 
     def test_본인_거래만_조회(self, user, other_user, sample_transaction):
         """다른 사용자의 거래는 보이지 않아야 합니다."""
         # sample_transaction은 user의 거래
-        result = TransactionService.list_transactions(user_id=str(other_user.id))
+        result = TransactionQueryService.list_transactions(user_id=str(other_user.id))
         assert result.count() == 0
 
     def test_카테고리_필터링(self, user, multiple_transactions):
         """category 필터가 정상 작동하는지 확인."""
-        result = TransactionService.list_transactions(
+        result = TransactionQueryService.list_transactions(
             user_id=str(user.id), category="식비"
         )
         assert result.count() == 1
@@ -134,7 +136,7 @@ class TestListTransactions:
 
     def test_날짜_범위_필터링(self, user, multiple_transactions):
         """from_date ~ to_date 범위 필터링."""
-        result = TransactionService.list_transactions(
+        result = TransactionQueryService.list_transactions(
             user_id=str(user.id),
             from_date=date(2026, 2, 11),
             to_date=date(2026, 2, 12),
@@ -144,11 +146,13 @@ class TestListTransactions:
 
 @pytest.mark.django_db
 class TestGetSummary:
-    """TransactionService.get_summary() 테스트."""
+    """TransactionQueryService.get_summary() 테스트."""
 
     def test_월별_요약(self, user, multiple_transactions):
         """2026-02 요약: expense만 합산, income은 제외."""
-        result = TransactionService.get_summary(user_id=str(user.id), month="2026-02")
+        result = TransactionQueryService.get_summary(
+            user_id=str(user.id), month="2026-02"
+        )
 
         # income 100,000은 제외
         assert result["total"] == 50000  # 5000 + 15000 + 30000
@@ -159,6 +163,8 @@ class TestGetSummary:
 
     def test_빈_월은_total_0(self, user):
         """거래가 없는 달은 total=0."""
-        result = TransactionService.get_summary(user_id=str(user.id), month="2025-01")
+        result = TransactionQueryService.get_summary(
+            user_id=str(user.id), month="2025-01"
+        )
         assert result["total"] == 0
         assert result["by_category"] == {}

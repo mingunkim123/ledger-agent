@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ledger.serializers import UndoRequestSerializer
-from ledger.services.transaction import TransactionService
+from ledger.services.transaction_command import TransactionCommandService
 
 
 class UndoView(APIView):
@@ -14,7 +14,7 @@ class UndoView(APIView):
         serializer = UndoRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        result = TransactionService.undo_transaction(
+        result = TransactionCommandService.undo_transaction(
             undo_token=serializer.validated_data["undo_token"],
         )
 
