@@ -1,9 +1,9 @@
 """커스텀 예외 — DRF Exception Handler가 일관된 JSON 응답으로 변환"""
 
-from rest_framework.exceptions import APIException
+from core.exceptions import ApplicationError
 
 
-class LLMBadRequestError(APIException):
+class LLMBadRequestError(ApplicationError):
     """LLM API 400 Bad Request"""
 
     status_code = 502
@@ -11,7 +11,7 @@ class LLMBadRequestError(APIException):
     default_code = "llm_bad_request"
 
 
-class LLMQuotaExceededError(APIException):
+class LLMQuotaExceededError(ApplicationError):
     """LLM API 429 Rate Limit"""
 
     status_code = 429
@@ -19,7 +19,7 @@ class LLMQuotaExceededError(APIException):
     default_code = "llm_quota_exceeded"
 
 
-class LLMAuthError(APIException):
+class LLMAuthError(ApplicationError):
     """LLM API 403 Authentication"""
 
     status_code = 502
@@ -27,7 +27,7 @@ class LLMAuthError(APIException):
     default_code = "llm_auth_error"
 
 
-class UndoTokenExpiredError(APIException):
+class UndoTokenExpiredError(ApplicationError):
     """Undo 토큰 만료 또는 유효하지 않음"""
 
     status_code = 400
@@ -37,9 +37,17 @@ class UndoTokenExpiredError(APIException):
     default_code = "undo_token_expired"
 
 
-class TransactionNotFoundError(APIException):
+class TransactionNotFoundError(ApplicationError):
     """거래 내역을 찾을 수 없음"""
 
     status_code = 404
     default_detail = "해당 트랜잭션을 찾을 수 없습니다."
     default_code = "transaction_not_found"
+
+
+class TransactionValueError(ApplicationError):
+    """거래 내역 입력값 오류"""
+
+    status_code = 400
+    default_detail = "입력값이 올바르지 않습니다."
+    default_code = "transaction_value_error"

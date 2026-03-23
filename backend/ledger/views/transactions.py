@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle
 
 from ledger.serializers import (
     CreateTransactionSerializer,
@@ -13,12 +14,16 @@ from ledger.serializers import (
 from ledger.services.transaction_command import TransactionCommandService
 from ledger.services.transaction_query import TransactionQueryService
 from ledger.permissions import IsOwner
+from core.exceptions import ApplicationError
+from ledger.exceptions import TransactionValueError
 
 
 class TransactionListCreateView(APIView):
     """POST /transactions/ — 거래 생성, GET /transactions/ — 거래 조회"""
 
     permission_classes = [IsAuthenticated, IsOwner]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "transactions.create"
 
     def post(self, request):
         """거래 생성"""
@@ -35,7 +40,7 @@ class TransactionListCreateView(APIView):
                 idem_key=data.get("idem_key"),
             )
         except ValueError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            raise TransactionValueError(detail=str(e))
 
         if result.get("cached"):
             return Response(
