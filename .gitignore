@@ -23,6 +23,7 @@ flutter_app/.flutter-plugins-dependencies
 # Cursor / change reports (로컬용)
 .cursor/
 docs/change-reports/
+docs/learning_7day_checklist.md
 
 # IDE
 .idea/
